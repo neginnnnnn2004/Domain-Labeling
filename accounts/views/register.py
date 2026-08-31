@@ -106,15 +106,15 @@ class UserRegisterView(APIView):
         # 17 - Password confirmation mismatch (only true structural mismatch)
         elif (
             'confirm_password' in errors
-            and any(
-                'match' in str(error).lower() or 'مطابقت' in str(error)
-                for error in errors['confirm_password']
+            and(
+                'match' in str(errors['confirm_password']).lower()
+                or 'مطابقت' in str(errors['confirm_password'])
             )
         ) or (
             'non_field_errors' in errors
-            and any(
-                'match' in str(error).lower() or 'مطابقت' in str(error)
-                for error in errors['non_field_errors']
+            and(
+                'match' in str(errors['non_field_errors']).lower()
+                or 'مطابقت' in str(errors['non_field_errors'])
             )
         ):
             error_code = 17

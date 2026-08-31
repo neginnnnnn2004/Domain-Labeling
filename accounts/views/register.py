@@ -103,14 +103,19 @@ class UserRegisterView(APIView):
                 "en": "One or more required fields are missing"
             }
 
-        # 17 - Password confirmation mismatch
-        elif 'confirm_password' in errors or (
-                'non_field_errors' in errors
-                and any(
-            'match' in str(error).lower()
-            or 'مطابقت' in str(error)
-            for error in errors['non_field_errors']
-        )
+        # 17 - Password confirmation mismatch (only true structural mismatch)
+        elif (
+            'confirm_password' in errors
+            and any(
+                'match' in str(error).lower() or 'مطابقت' in str(error)
+                for error in errors['confirm_password']
+            )
+        ) or (
+            'non_field_errors' in errors
+            and any(
+                'match' in str(error).lower() or 'مطابقت' in str(error)
+                for error in errors['non_field_errors']
+            )
         ):
             error_code = 17
             error_message = {
@@ -118,8 +123,8 @@ class UserRegisterView(APIView):
                 "en": "Password and confirm password do not match"
             }
 
-        # 13 - Invalid password
-        elif 'password' in errors:
+        # 13 - Invalid password (weak, bad format, or too short)
+        elif 'password' in errors or 'confirm_password' in errors:
             error_code = 13
             error_message = {
                 "fa": "رمز عبور وارد شده معتبر نیست",

@@ -60,5 +60,3 @@ class DomainDeleteSerializer(serializers.Serializer):
     Attributes:
         domain_name (str): The unique name of the domain to be deleted.
     """
-
-    domain_name = serializers.CharField(required=True)

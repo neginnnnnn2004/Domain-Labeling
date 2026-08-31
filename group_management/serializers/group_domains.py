@@ -34,4 +34,3 @@ class DomainRegisterSerializer(serializers.ModelSerializer):
         The creating user is automatically added when saving
         """
         user = self.context['request'].user
-        return Domain.objects.create(created_by=user, **validated_data)

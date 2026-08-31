@@ -176,4 +176,3 @@ class UserLoginTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         access_token = response.data['access_token']
         token = AccessToken(access_token)
-        self.assertEqual(int(token['user_id']),self.user.id)

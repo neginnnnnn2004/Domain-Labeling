@@ -604,4 +604,3 @@ class ProfileUpdateTest(APITestCase):
 
         self.assertEqual(self.user.username, "testuser")
         self.assertEqual(self.user.email, "test@example.com")
-

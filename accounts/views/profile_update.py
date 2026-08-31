@@ -147,4 +147,3 @@ class ProfileUpdateView(APIView):
     )
     def patch(self, request):
         return self.update(request, partial=True)
-

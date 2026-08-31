@@ -217,4 +217,3 @@ class UserRegisterView(APIView):
             "message": error_message,
             'detail': errors
         }, status=status.HTTP_400_BAD_REQUEST)
-

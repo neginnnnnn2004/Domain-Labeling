@@ -310,15 +310,221 @@ http://127.0.0.1:8000/
 ```
 
 #it should be edit
-🗺️ API Endpoints Reference
-1. Authentication & Profile Management (auth_views.py)
-POST /api/accounts/register/ - Registers a new user account profile (Validation codes: 10, 11, 12).
+# 🗺️ API Endpoints Reference — Authentication & Profile Management
 
-POST /api/accounts/login/ - Authenticates user credentials and issues secure access/refresh JWT tokens.
+Base path: `/accounts/`
 
-PUT /api/accounts/profile/ - Full profile schema updates (Requires active JWT token).
+---
 
-PATCH /api/accounts/profile/ - Partial field updates for the current authenticated profile.
+## POST /accounts/register/
+
+Registers a new user account and issues one-time backup recovery codes for
+account recovery. Backup codes are shown only once at registration time and
+must be stored securely by the client.
+
+**Authentication:** Not required
+
+**Request Body**
+
+| Field              | Type   | Required | Notes                                                              |
+|--------------------|--------|----------|-----------------------------------------------------------------------|
+| `username`         | string | Yes      | 5–20 chars; letters, digits, `_`, `-` only. Normalized to lowercase.   |
+| `password`         | string | Yes      | Min 8 chars; validated against Django's password strength rules.      |
+| `confirm_password` | string | Yes      | Must match `password`.                                                |
+| `email`            | string | Yes      | Must be unique. Normalized to lowercase.                              |
+| `phone`            | string | Yes      | Iranian mobile format: `09xxxxxxxxx`. Must be unique.                  |
+| `first_name`       | string | No       | —                                                                      |
+| `last_name`        | string | No       | —                                                                      |
+
+**Response — 201 Created**
+
+```json
+{
+  "message": {
+    "fa": "...",
+    "en": "Registration successful. Please store your backup codes in a safe place."
+  },
+  "user": { "username": "...", "email": "...", "phone": "...", "first_name": "...", "last_name": "..." },
+  "backup_codes": ["XXXXXXXX", "..."]
+}
+```
+
+**Response — 400 Bad Request**
+
+| `error_code` | Meaning                                                     |
+|---------------|-----------------------------------------------------------------|
+| 10            | Invalid input data (e.g. username format)                        |
+| 11            | Username already exists                                          |
+| 12            | One or more required fields missing or empty                     |
+| 13            | Password is invalid (too weak, wrong format, too short)          |
+| 14            | Phone number already registered                                  |
+| 15            | Email address already registered                                 |
+| 16            | Invalid email or phone number format                             |
+| 17            | `password` and `confirm_password` do not match                  |
+
+---
+
+## POST /accounts/login/
+
+Authenticates a user's credentials and issues a JWT access/refresh token
+pair. To prevent brute-force and user-enumeration attacks, invalid
+credentials and a deleted account return the same generic error.
+
+**Authentication:** Not required
+
+**Request Body**
+
+| Field      | Type   | Required | Notes                                    |
+|------------|--------|----------|--------------------------------------------|
+| `username` | string | Yes      | Normalized to lowercase before lookup.      |
+| `password` | string | Yes      | Plain-text password.                        |
+
+**Response — 200 OK**
+
+```json
+{
+  "access_token": "...",
+  "refresh": "..."
+}
+```
+
+**Response — 400 Bad Request**
+
+| `error_code` | Meaning                                                        |
+|---------------|-----------------------------------------------------------------|
+| 10            | Provided data (username or password format) is missing or invalid |
+
+**Response — 401 Unauthorized**
+
+| `error_code` | Meaning                                                                   |
+|---------------|-------------------------------------------------------------------------------|
+| 20            | Username or password does not match records, or the account has been deleted   |
+| 21            | Account status is inactive — `unverified`, `pending`, or `suspended`          |
+
+**Account status behavior**
+
+Only users with `status == 'active'` can log in successfully. Other statuses
+map to distinct `en`/`fa` messages under the same `error_code: 21`:
+
+| `status`     | Message summary                          |
+|--------------|--------------------------------------------|
+| `unverified` | Account not yet verified by an admin        |
+| `pending`    | Account is pending approval                 |
+| `suspended`  | Account has been suspended                  |
+
+---
+
+## POST /accounts/reset-password/
+
+Resets a user's password using a one-time backup recovery code. Backup codes
+are single-use and are invalidated immediately after a successful reset. A
+new backup code is issued in the response to replace the used one.
+
+**Authentication:** Not required
+
+**Security notes**
+- Invalid account information and invalid backup codes return the same
+  generic error response, to prevent user enumeration.
+- Passwords and backup codes are never written to security logs.
+
+**Request Body**
+
+| Field              | Type   | Required | Notes                                    |
+|--------------------|--------|----------|----------------------------------------------|
+| `username`         | string | Yes      | Normalized to lowercase before lookup.         |
+| `backup_code`      | string | Yes      | One of the codes issued at registration.       |
+| `new_password`     | string | Yes      | —                                               |
+| `confirm_password` | string | Yes      | Must match `new_password`.                     |
+
+**Response — 200 OK**
+
+```json
+{
+  "message": {
+    "fa": "...",
+    "en": "Your password has been changed successfully. You can now log in."
+  },
+  "show_popup": true,
+  "new_backup_code": "XXXXXXXX"
+}
+```
+
+**Response — 400 Bad Request**
+
+| `error_code` | Meaning                                                                         |
+|---------------|-------------------------------------------------------------------------------------|
+| 10            | Invalid input data or password format                                                |
+| 75            | Invalid account information or backup code (covers nonexistent user, inactive account, and invalid/used backup code) |
+
+---
+
+## GET /accounts/myRole/
+
+Returns the authenticated user's profile and role details.
+
+**Authentication:** Required (JWT)
+
+**Response — 200 OK**
+
+Response body shape depends on `ReturnRoleUsersSerializer` (fields not
+confirmed here — includes at minimum the user's role).
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure (missing/invalid token).
+
+**Response — 500 Internal Server Error**
+
+```json
+{
+  "detail": "An error occurred while fetching user role / خطایی در دریافت نقش کاربر رخ داده است."
+}
+```
+
+Returned when an unexpected exception occurs while serializing the user's
+role data.
+
+---
+
+## PATCH /accounts/profile/update/
+
+Partially updates the authenticated user's profile information. Only `PATCH`
+is supported — there is no `PUT` (full replace) on this endpoint.
+
+**Authentication:** Required (JWT)
+
+**Request Body**
+
+Fields are defined by `ProfileUpdateSerializer` (not fully enumerated here);
+confirmed sensitive fields include `phone`, `password`, and
+`confirm_password`. Successful changes to `phone` or `password` are logged
+as sensitive-field changes.
+
+**Response — 200 OK**
+
+```json
+{
+  "message": {
+    "fa": "پروفایل با موفقیت بروزرسانی شد",
+    "en": "Profile updated successfully"
+  },
+  "data": { "...": "shape defined by ProfileUpdateResponseSerializer" }
+}
+```
+
+**Response — 400 Bad Request**
+
+| `error_code` | Meaning                                              |
+|---------------|-----------------------------------------------------------|
+| 10            | Invalid input data                                          |
+| 30            | Password is invalid (weak or bad format)                    |
+| 31            | Invalid phone number format                                 |
+| 32            | `password` and `confirm_password` do not match              |
+| 33            | Phone number already registered by another user              |
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure (missing/invalid token).
 
 2. User Lifecycle & Role Administration (user_views.py)
 GET /api/accounts/users/ - Fetches a list of all registered users across the platform.

@@ -6,6 +6,7 @@ class IsAdminRole(BasePermission):
         return bool(
             request.user and
             request.user.is_authenticated and
+            getattr(request.user, 'status', None) == 'active' and
             hasattr(request.user, 'role') and
             request.user.role is not None and
             request.user.role.code in [ 'super_admin', 'admin']
@@ -16,6 +17,7 @@ class IsSuperAdmin(BasePermission):
         return bool(
             request.user and
             request.user.is_authenticated and
+            getattr(request.user, 'status', None) == 'active' and
             hasattr(request.user, 'role') and
             request.user.role is not None and
             request.user.role.code in ['super_admin']
@@ -26,6 +28,7 @@ class IsAllowedUser(BasePermission):
         return bool(
             request.user and
             request.user.is_authenticated and
+            getattr(request.user, 'status', None) == 'active' and
             hasattr(request.user, 'role') and
             request.user.role is not None and
             request.user.role.code in [ 'super_admin', 'admin','regular']

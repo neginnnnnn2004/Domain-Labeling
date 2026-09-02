@@ -832,13 +832,7 @@ Authenticated user is not a super admin.
 - This is a **soft delete**: `deleted_at` is set to the current time and `status` is set to `'deleted'`; the record is not actually removed from the database.
 - After this operation, the user becomes inaccessible through any endpoint that filters on `deleted_at__isnull=True` (e.g. role assignment, status change).
 
-
-3. Stateless Password Reset Flow (reset_pass_views.py)
-POST /api/accounts/reset-password/ - Initiates the reset. Sends a secure 10-minute token to the user's registered email (Protected against user enumeration).
-
-POST /api/accounts/reset-password/confirm/ - Validates the cryptographic token and securely hashes/saves the new password.
-
-4. Enterprise Domain & Tag Management (domain_views.py)
+3. Enterprise Domain & Tag Management (domain_views.py)
 POST /api/accounts/domains/import/ - Admin-only operation to import or create structured domains.
 
 GET /api/accounts/domains/ - Retrieves a tailored list of active domains depending on group visibility or admin scopes.
@@ -851,7 +845,7 @@ POST /api/accounts/domains/assign-tag/ - Bulk records assignment of metadata tag
 
 PATCH /api/accounts/domains/assign-tag/ - Multi-record transaction patch updating domain tags with explicit verification confirm flags.
 
-5. Group & Access Control Management (group_views.py)
+4. Group & Access Control Management (group_views.py)
 GET /api/accounts/groups/ - Lists all available operational organizational groups (Admin-only).
 
 POST /api/accounts/groups/ - Instantiates a new system access or organizational group profile.

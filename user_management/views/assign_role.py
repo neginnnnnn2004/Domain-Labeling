@@ -136,12 +136,6 @@ class AssignUserRoleView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception:
-            # logger.exception(
-            #     "ROLE_CHANGE_FAILED | TargetUser: %s | Admin: %s",
-            #     pk,
-            #     request.user.id,
-            # )
-
             log_critical_event(
                 action='change_user_role',
                 status_type='error',

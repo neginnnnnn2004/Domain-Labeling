@@ -526,27 +526,313 @@ as sensitive-field changes.
 
 Standard authentication failure (missing/invalid token).
 
-2. User Lifecycle & Role Administration (user_views.py)
-GET /api/accounts/users/ - Fetches a list of all registered users across the platform.
+# 🗺️ API Endpoints Reference — User Management
 
-GET /api/accounts/users/pending/ - Filters and lists all accounts awaiting activation (status="pending"). Requires Admin privileges.
+Base path: `/user_management/` *(confirmed via the project's root `urls.py`: `path("user_management/", include('user_management.urls'))`)*
 
-GET /api/accounts/roles/ - Lists all available system assignment roles.
+> ⚠️ Note: two different permission levels are used across this app:
+> - `IsSuperAdmin` → required for assigning roles, changing status, and soft-deleting users
+> - `IsAdminRole` → required for listing users, pending users, and roles
+>
+> These two permissions are not necessarily the same. Confirm which role is required before calling each endpoint.
 
-PATCH /api/accounts/users/<int:pk>/role/ - Assigns a specialized access role to a chosen user (Validation codes: 10, 40).
+---
 
-PATCH /api/accounts/users/<int:pk>/status/ - Modifies a profile's operational state matrix (Validation codes: 10, 40).
+## GET /user_management/admin/list-of-users/
 
-DELETE /api/accounts/users/<int:pk>/ - Gracefully updates a target profile to the deleted state and stamps execution time.
+Fetches a list of all registered users across the platform.
 
-PATCH /api/accounts/users/<int:pk>/activation/ - Directly alters the primitive is_active boolean value flags.
+**Authentication:** Required (JWT)
 
-3. Stateless Password Reset Flow (reset_pass_views.py)
-POST /api/accounts/reset-password/ - Initiates the reset. Sends a secure 10-minute token to the user's registered email (Protected against user enumeration).
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
 
-POST /api/accounts/reset-password/confirm/ - Validates the cryptographic token and securely hashes/saves the new password.
+**Response — 200 OK**
 
-4. Enterprise Domain & Tag Management (domain_views.py)
+```json
+[
+  { "...": "shape defined by ListOfUsersSerializer" }
+]
+```
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure (missing/invalid token).
+
+**Response — 403 Forbidden**
+
+Authenticated user does not have admin role.
+
+**Response — 500 Internal Server Error**
+
+```json
+{
+  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
+}
+```
+
+---
+
+## GET /user_management/admin/list-of-pending-users/
+
+Filters and lists all accounts awaiting activation (`status == "pending"`).
+
+**Authentication:** Required (JWT)
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+**Response — 200 OK**
+
+```json
+[
+  { "...": "shape defined by ListOfUsersSerializer" }
+]
+```
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure.
+
+**Response — 403 Forbidden**
+
+Authenticated user does not have admin role.
+
+**Response — 500 Internal Server Error**
+
+```json
+{
+  "detail": "An error occurred while fetching pending users / خطایی در دریافت کاربران در انتظار رخ داده است."
+}
+```
+
+**Notes**
+
+- No pagination or additional filtering is applied — only `status == "pending"` is filtered.
+
+---
+
+## GET /user_management/admin/list-of-roles/
+
+Lists all available system assignment roles.
+
+**Authentication:** Required (JWT)
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+**Response — 200 OK**
+
+```json
+[
+  { "...": "shape defined by ListOfRolesSerializer" }
+]
+```
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure.
+
+**Response — 403 Forbidden**
+
+Authenticated user does not have admin role.
+
+**Response — 500 Internal Server Error**
+
+```json
+{
+  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
+}
+```
+
+---
+
+## PATCH /user_management/super-admin/users/{pk}/assign/role/
+
+Assigns or changes a user's role (promote to admin, demote to regular user, or change guest to regular user). Only a super admin can perform this action.
+
+**Authentication:** Required (JWT)
+
+**Permissions:** `IsAuthenticated`, `IsSuperAdmin`
+
+**Path Parameters**
+
+| Field | Type | Notes                          |
+|-------|------|---------------------------------|
+| `pk`  | int  | ID of the target user whose role is being changed |
+
+**Request Body**
+
+| Field  | Type | Required | Notes                                                              |
+|--------|------|----------|------------------------------------------------------------------------|
+| `role` | int  | Yes*     | ID of the new role (must be an existing, valid `Role`)                  |
+
+> \* Note: the serializer is called with `partial=True`. If `role` is omitted from the request body, the request succeeds as a no-op with a `200` response and no actual change.
+
+**Response — 200 OK**
+
+```json
+{
+  "message": "User role updated successfully / نقش کاربر با موفقیت بروزرسانی شد.",
+  "data": { "...": "shape defined by UserRoleUpdateSerializer" }
+}
+```
+
+**Response — 400 Bad Request**
+
+| `error_code` | Meaning                                                                  |
+|---------------|-------------------------------------------------------------------------------|
+| 10            | Invalid payload (e.g. malformed `role`) or an attempt to change one's own role |
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure.
+
+**Response — 403 Forbidden**
+
+Authenticated user is not a super admin.
+
+**Response — 404 Not Found**
+
+| `error_code` | Meaning                                                          |
+|---------------|----------------------------------------------------------------------|
+| 40            | Target user not found or has been soft-deleted (`deleted_at` set)     |
+
+**Response — 500 Internal Server Error**
+
+```json
+{
+  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
+}
+```
+
+**Business rules / Notes**
+
+- A user cannot change their own role, even a super admin — this attempt is rejected with `error_code: 10`.
+- All attempts (successful and failed) are logged via `log_critical_event`, including the old and new role on success.
+
+---
+
+## PATCH /user_management/super-admin/users/{pk}/change/status/
+
+Modifies a user account's status (e.g. approving pending users). Only a super admin can perform this action.
+
+**Authentication:** Required (JWT)
+
+**Permissions:** `IsAuthenticated`, `IsSuperAdmin`
+
+**Path Parameters**
+
+| Field | Type | Notes                            |
+|-------|------|-------------------------------------|
+| `pk`  | int  | ID of the target user whose status is being changed |
+
+**Request Body**
+
+| Field    | Type   | Required | Notes                                                                 |
+|----------|--------|----------|----------------------------------------------------------------------------|
+| `status` | string | Yes*     | One of: `pending`, `active`, `suspended`, `unverified`                     |
+
+> \* Like the role endpoint, this serializer is also called with `partial=True`.
+
+**Valid status values**
+
+| Value        | Meaning                    |
+|--------------|--------------------------------|
+| `pending`    | Awaiting approval               |
+| `active`     | Active / Approved                |
+| `suspended`  | Suspended                        |
+| `unverified` | Unverified                       |
+
+**Response — 200 OK**
+
+```json
+{
+  "message": "User status updated successfully to '{new_status}' / وضعیت کاربر با موفقیت به {new_status} تغییر یافت.",
+  "data": { "...": "shape defined by UserStatusUpdateSerializer" }
+}
+```
+
+**Response — 400 Bad Request**
+
+| `error_code` | Meaning                          |
+|---------------|--------------------------------------|
+| 10            | The `status` value supplied is invalid |
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure.
+
+**Response — 403 Forbidden**
+
+Authenticated user is not a super admin.
+
+**Response — 404 Not Found**
+
+| `error_code` | Meaning                                          |
+|---------------|-------------------------------------------------------|
+| 40            | Target user not found or has been soft-deleted          |
+
+**Response — 500 Internal Server Error**
+
+```json
+{
+  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
+}
+```
+
+**Notes**
+
+- Both successful and failed status changes are logged via `log_critical_event`, including `old_status` and `new_status`.
+- Unlike the role endpoint, this endpoint has no restriction on changing one's own status (no self-status-change check).
+
+---
+
+## DELETE /user_management/super-admin/users/{pk}/change/status/
+
+Soft-deletes a user account. Only a super admin can perform this action.
+
+> ⚠️ Note: this shares the exact same URL as `PATCH .../change/status/` above — both `patch` and `delete` are handled by `ManageUsersStatusView`, distinguished only by HTTP method.
+
+**Authentication:** Required (JWT)
+
+**Permissions:** `IsAuthenticated`, `IsSuperAdmin`
+
+**Path Parameters**
+
+| Field | Type | Notes                    |
+|-------|------|------------------------------|
+| `pk`  | int  | ID of the target user to delete |
+
+**Response — 204 No Content**
+
+Empty response body.
+
+**Response — 401 Unauthorized**
+
+Standard authentication failure.
+
+**Response — 403 Forbidden**
+
+Authenticated user is not a super admin.
+
+**Response — 404 Not Found**
+
+| `error_code` | Meaning                                          |
+|---------------|-------------------------------------------------------|
+| 40            | Target user not found or already deleted               |
+
+**Response — 500 Internal Server Error**
+
+```json
+{
+  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
+}
+```
+
+**Business rules / Notes**
+
+- This is a **soft delete**: `deleted_at` is set to the current time and `status` is set to `'deleted'`; the record is not actually removed from the database.
+- After this operation, the user becomes inaccessible through any endpoint that filters on `deleted_at__isnull=True` (e.g. role assignment, status change).
+
+3. Enterprise Domain & Tag Management (domain_views.py)
 POST /api/accounts/domains/import/ - Admin-only operation to import or create structured domains.
 
 GET /api/accounts/domains/ - Retrieves a tailored list of active domains depending on group visibility or admin scopes.
@@ -559,7 +845,7 @@ POST /api/accounts/domains/assign-tag/ - Bulk records assignment of metadata tag
 
 PATCH /api/accounts/domains/assign-tag/ - Multi-record transaction patch updating domain tags with explicit verification confirm flags.
 
-5. Group & Access Control Management (group_views.py)
+4. Group & Access Control Management (group_views.py)
 GET /api/accounts/groups/ - Lists all available operational organizational groups (Admin-only).
 
 POST /api/accounts/groups/ - Instantiates a new system access or organizational group profile.

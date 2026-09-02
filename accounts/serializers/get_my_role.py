@@ -39,9 +39,9 @@ class ReturnRoleUsersSerializer(serializers.ModelSerializer):
            }
        """
 
-    role_id = serializers.IntegerField(source='role.id', read_only=True)
-    role_code = serializers.CharField(source='role.code', read_only=True)
-    role_title = serializers.CharField(source='role.title', read_only=True)
+    role_id = serializers.IntegerField(source='role.id', read_only=True, default=None)
+    role_code = serializers.CharField(source='role.code', read_only=True, default=None)
+    role_title = serializers.CharField(source='role.title', read_only=True, default=None)
 
     class Meta:
         model = User

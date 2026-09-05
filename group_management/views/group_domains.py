@@ -154,6 +154,8 @@ class GroupDomainView(APIView):
             has_user_tag = len(user_tags) > 0
 
             # Visibility Logic
+            # Admin-only by design: tags_overview (count + user list for hover)
+            # is only shown on the group's domain-management page, which is admin-only.
             if is_admin:
                 visible_tags = [udt.tag for udt in domain_tags_qs]
                 can_add_tag = True

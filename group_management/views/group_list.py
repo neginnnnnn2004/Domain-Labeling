@@ -43,7 +43,7 @@ class ListOfGroupsView(APIView):
                         filter=Q(group_memberships__deleted_at__isnull=True),
                         distinct=True
                     ),
-                    tags_count=Count(
+                    tag_count=Count(
                         'domains__user_domain_tag',
                         filter=Q(domains__user_domain_tag__deleted_at__isnull=True),
                         distinct=True

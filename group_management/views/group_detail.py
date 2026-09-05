@@ -28,13 +28,13 @@ class GroupDetailOREditView(APIView):
 
         Custom error codes:
 
-        code 50: The requested group was not found.
+        code 65: The requested group was not found.
         """,
         responses={
             200: GroupSerializer(),
             401: "Unauthorized",
             403: "Forbidden",
-            404: "Not Found (Code 50)",
+            404: "Not Found (Code 65)",
         }
     )
     def get(self, request, pk):
@@ -45,13 +45,13 @@ class GroupDetailOREditView(APIView):
                 status_type='failed',
                 request=request,
                 user_id=request.user.id,
-                error_code=50,
+                error_code=65,
                 extra={
                     'group_id': pk,
                 }
             )
             return Response({
-                "error_code": 50,
+                "error_code": 65,
                 "message": {
                     "fa": "گروه مورد نظر یافت نشد.",
                     "en": "The requested group was not found."
@@ -77,7 +77,7 @@ class GroupDetailOREditView(APIView):
 
         Specific Error Codes:
         Code 10: The submitted information is invalid.
-        Code 50: The requested group was not found.
+        Code 65: The requested group was not found.
 
         """,
         request_body=GroupSerializer,
@@ -86,7 +86,7 @@ class GroupDetailOREditView(APIView):
             400: "Bad Request (Code 10)",
             401: "Unauthorized",
             403: "Forbidden",
-            404: "Not Found (Code 50)"
+            404: "Not Found (Code 65)"
         }
     )
     def patch(self, request, pk):
@@ -100,11 +100,11 @@ class GroupDetailOREditView(APIView):
                 status_type='failed',
                 request=request,
                 user_id=request.user.id,
-                error_code=50,
+                error_code=65,
                 extra={'group_id': pk}
             )
             return Response({
-                "error_code": 50,
+                "error_code": 65,
                 "message": {
                     "fa": "گروه مورد نظر جهت ویرایش یافت نشد.",
                     "en": "The group to be edited was not found."
@@ -115,7 +115,7 @@ class GroupDetailOREditView(APIView):
         serializer = GroupSerializer(group, data=request.data, partial=partial)
         if not serializer.is_valid():
             log_critical_event(
-                action="GROUP_DETAIL",
+                action="GROUP_UPDATE ",
                 status_type='failed',
                 request=request,
                 user_id=request.user.id,
@@ -150,13 +150,13 @@ class GroupDetailOREditView(APIView):
 
         Specific Error Codes:
 
-        Code 50: The requested group was not found.
+        Code 65: The requested group was not found.
         """,
         responses={
             204: "No Content",
             401: "Unauthorized",
             403: "Forbidden",
-            404: "Not Found (Code 50)",
+            404: "Not Found (Code 65)",
         }
     )
     def delete(self, request, pk):
@@ -167,11 +167,11 @@ class GroupDetailOREditView(APIView):
                 status_type='failed',
                 request=request,
                 user_id=request.user.id,
-                error_code=50,
+                error_code=65,
                 extra={'group_id': pk}
             )
             return Response({
-                "error_code": 50,
+                "error_code": 65,
                 "message": {
                     "fa": "گروه مورد نظر قبلاً حذف شده یا وجود ندارد.",
                     "en": "The requested group has already been deleted or does not exist."

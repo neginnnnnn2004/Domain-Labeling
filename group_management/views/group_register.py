@@ -64,7 +64,7 @@ class GroupRegisterView(APIView):
             user_id=request.user.id,
             extra={
                 "group_id": group.id,
-                "group_name": getattr(group, 'name',None),
+                "group_name": getattr(group, 'title',None),
             }
         )
         return Response(GroupResponseSerializer(group).data, status=status.HTTP_201_CREATED)

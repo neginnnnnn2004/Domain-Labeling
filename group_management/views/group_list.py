@@ -43,11 +43,6 @@ class ListOfGroupsView(APIView):
                         filter=Q(group_memberships__deleted_at__isnull=True),
                         distinct=True
                     ),
-                    tag_count=Count(
-                        'domains__user_domain_tag',
-                        filter=Q(domains__user_domain_tag__deleted_at__isnull=True),
-                        distinct=True
-                    )
                 )
                 serializer = AdminListOfGroupsSerializer(groups, many=True)
                 access_type = 'admin'

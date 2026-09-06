@@ -1,11 +1,13 @@
+from unittest.mock import patch
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from identity.models import User, Role, Group, UserGroup
+from identity.models import User, Role, Group, UserGroup,Domain,User_Domain_Tag,Tag
 
 class GroupListTest(APITestCase):
     def setUp(self):
-        # create roles
+          # create roles
         self.admin_role = Role.objects.create(
             code='admin',
             title='ادمین',
@@ -87,7 +89,6 @@ class GroupListTest(APITestCase):
             title = "finance",
             description = "this is for finance developers",
         )
-
         # create_user_group
         # self.active_regular_user_group_list
         UserGroup.objects.create(
@@ -112,7 +113,6 @@ class GroupListTest(APITestCase):
         # define urls
         self.list_group_url = reverse('list-of-groups')
 
-    # ===== تست ۱: کاربر عادی فقط گروههای خودش رو میبینه =====
     def test_regular_user_sees_only_their_groups(self):
         self.client.force_authenticate(user=self.regular_user)
         response = self.client.get(self.list_group_url)
@@ -125,8 +125,24 @@ class GroupListTest(APITestCase):
         self.assertNotIn('general', titles)
         self.assertNotIn('finance', titles)
 
+        for group_data in response.data:
+            self.assertNotIn('code', group_data)
+            self.assertNotIn('is_active', group_data)
+            self.assertNotIn('user_count', group_data)
+            self.assertNotIn('tag_count', group_data)
+            self.assertIn('id', group_data)
+            self.assertIn('title', group_data)
+            self.assertIn('description', group_data)
 
-    # ===== تست ۲: کاربر محدود فقط گروه خودش رو میبینه =====
+    @patch('group_management.views.group_list.log_critical_event')
+    def test_regular_user_access_type_logged_correctly(self, mock_log):
+        self.client.force_authenticate(user=self.regular_user)
+        self.client.get(self.list_group_url)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['extra']['access_type'], 'member')
+
+
     def test_limited_user_sees_only_their_group(self):
         self.client.force_authenticate(user=self.limited_user)
         response = self.client.get(self.list_group_url)
@@ -139,8 +155,23 @@ class GroupListTest(APITestCase):
         self.assertNotIn('backend', titles)
         self.assertNotIn('general', titles)
 
+        for group_data in response.data:
+            self.assertNotIn('code', group_data)
+            self.assertNotIn('is_active', group_data)
+            self.assertNotIn('user_count', group_data)
+            self.assertNotIn('tag_count', group_data)
+            self.assertIn('id', group_data)
+            self.assertIn('title', group_data)
+            self.assertIn('description', group_data)
 
-    # ===== تست ۴: ادمین همه گروهها رو میبینه =====
+    @patch('group_management.views.group_list.log_critical_event')
+    def test_limited_user_access_type_logged_correctly(self, mock_log):
+        self.client.force_authenticate(user=self.limited_user)
+        self.client.get(self.list_group_url)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['extra']['access_type'], 'member')
+
     def test_admin_sees_all_groups(self):
         self.client.force_authenticate(user=self.admin_user)
         response = self.client.get(self.list_group_url)
@@ -153,8 +184,23 @@ class GroupListTest(APITestCase):
         self.assertIn('general', titles)
         self.assertIn('finance', titles)
 
+        for group_data in response.data:
+            self.assertIn('code', group_data)
+            self.assertIn('is_active', group_data)
+            self.assertIn('user_count', group_data)
 
-    # ===== تست ۵: سوپر ادمین همه گروهها رو میبینه =====
+        group_one_data = next(g for g in response.data if g['id'] == self.group_one.id)
+        self.assertEqual(group_one_data['code'], self.group_one.code)
+        self.assertTrue(group_one_data['is_active'])
+
+    @patch('group_management.views.group_list.log_critical_event')
+    def test_admin_access_type_logged_correctly(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        self.client.get(self.list_group_url)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['extra']['access_type'], 'admin')
+
     def test_super_admin_sees_all_groups(self):
         self.client.force_authenticate(user=self.super_admin_user)
         response = self.client.get(self.list_group_url)
@@ -162,9 +208,24 @@ class GroupListTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 3)
 
+        for group_data in response.data:
+            self.assertIn('code', group_data)
+            self.assertIn('is_active', group_data)
+            self.assertIn('user_count', group_data)
 
-    # ===== تست ۶: کاربر بدون احراز هویت ۴۰۱ میگیره =====
-    # pending user can not authenticate
+        group_two_data = next(g for g in response.data if g['id'] == self.group_two.id)
+        self.assertEqual(group_two_data['code'], self.group_two.code)
+        self.assertTrue(group_two_data['is_active'])
+
+    @patch('group_management.views.group_list.log_critical_event')
+    def test_super_admin_access_type_logged_correctly(self, mock_log):
+        self.client.force_authenticate(user=self.super_admin_user)
+        self.client.get(self.list_group_url)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['extra']['access_type'], 'admin')
+
+
     def test_unauthenticated_user_gets_401(self):
         response = self.client.get(self.list_group_url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -183,3 +244,99 @@ class GroupListTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 0)
+
+    def _make_user(self, suffix, **extra):
+        """Helper to create a user with all unique fields auto-filled."""
+        defaults = {
+            "password": "x",
+            "email": f"user_{suffix}@test.com",
+            "phone": f"0910000{suffix:04d}",
+        }
+        defaults.update(extra)
+        return User.objects.create_user(username=f"user_{suffix}", **defaults)
+
+    def test_user_count_annotation_is_correct(self):
+        self.client.force_authenticate(user=self.admin_user)
+        group = Group.objects.create(title="Count Test", code="counttest")
+
+        for i in range(3):
+            u = self._make_user(i)
+            UserGroup.objects.create(user=u, group=group, is_primary=False)
+
+        response = self.client.get(self.list_group_url)
+        data = next(g for g in response.data if g['id'] == group.id)
+        self.assertEqual(data['user_count'], 3)
+
+###################Soft-delete#################
+    def test_admin_does_not_see_deleted_groups(self):
+        self.client.force_authenticate(user=self.admin_user)
+        self.group_three.deleted_at = timezone.now() # after the changes it should be saved
+        self.group_three.save(update_fields=['deleted_at'])
+        response = self.client.get(self.list_group_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        self.assertNotEqual(len(response.data), 3)
+
+        titles = [g['title'] for g in response.data]
+        self.assertIn('backend', titles)
+        self.assertIn('general', titles)
+        self.assertNotIn('finance', titles)
+
+        for group_data in response.data:
+            self.assertIn('code', group_data)
+            self.assertIn('is_active', group_data)
+            self.assertIn('user_count', group_data)
+
+    def test_group_with_no_user(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        group_four = Group.objects.create(
+            title="UiUx",
+            description="this is for UiUx Users",
+        )
+
+        response = self.client.get(self.list_group_url)
+
+        group_four_data = next(
+            g for g in response.data if g['id'] == group_four.id
+        )
+
+        self.assertEqual(group_four_data['user_count'], 0)
+
+    def test_group_count_logged_correctly(self):
+        with patch('group_management.views.group_list.log_critical_event') as mock_log:
+            self.client.force_authenticate(user=self.admin_user)
+            response = self.client.get(self.list_group_url)
+
+            mock_log.assert_called_once()
+            actual_count = len(response.data)
+            self.assertEqual(
+                mock_log.call_args.kwargs['extra']['group_count'],
+                actual_count
+            )
+
+    @patch('group_management.views.group_list.log_critical_event')
+    def test_error_status_logged_on_exception(self, mock_log):
+        with patch(
+                'group_management.views.group_list.AdminListOfGroupsSerializer'
+        ) as mock_serializer:
+            mock_serializer.side_effect = Exception("boom")
+            self.client.force_authenticate(user=self.admin_user)
+            self.client.get(self.list_group_url)
+
+            mock_log.assert_called_once()
+            self.assertEqual(mock_log.call_args.kwargs['status_type'], 'error')
+            self.assertEqual(mock_log.call_args.kwargs['error_code'], 500)
+            self.assertIn('error_type', mock_log.call_args.kwargs['extra'])
+            self.assertIn('error_message', mock_log.call_args.kwargs['extra'])
+
+
+    def test_wrong_http_methods_not_allowed(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        for method_name in ['post', 'put', 'patch', 'delete']:
+            with self.subTest(method=method_name):
+                method = getattr(self.client, method_name)
+                response = method(self.list_group_url, {}, format='json')
+                self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)

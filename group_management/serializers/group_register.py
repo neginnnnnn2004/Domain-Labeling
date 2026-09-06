@@ -50,7 +50,7 @@ class GroupResponseSerializer(serializers.ModelSerializer):
             Example:
                 >>> serializer = GroupResponseSerializer(group)
                 >>> serializer.data
-                {'id': 1, 'title': 'Backend', 'code': 'backend'}
+                {'id': 1, 'title': 'Backend', 'code': 'backend','description': ''this group is for backend developers'}
             """
         model = Group
-        fields = ['id', 'title', 'code']
+        fields = ['id', 'title', 'code','description']

@@ -82,7 +82,8 @@ class GroupMembersListView(APIView):
 
         memberships = UserGroup.objects.filter(
             group=group,
-            deleted_at__isnull=True
+            deleted_at__isnull=True,
+            user__deleted_at__isnull=True
         ).select_related(
             'user',
             'assigned_by'

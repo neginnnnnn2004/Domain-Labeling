@@ -115,7 +115,7 @@ class GroupDetailOREditView(APIView):
         serializer = GroupSerializer(group, data=request.data, partial=partial)
         if not serializer.is_valid():
             log_critical_event(
-                action="GROUP_UPDATE ",
+                action="GROUP_UPDATE",
                 status_type='failed',
                 request=request,
                 user_id=request.user.id,

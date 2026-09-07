@@ -1,8 +1,12 @@
+from tokenize import group
+
+from django.contrib.messages.api import success
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from identity.models import User, Role, Group, UserGroup
+from unittest.mock import patch
 
 
 class GroupDetailTest(APITestCase):
@@ -87,8 +91,12 @@ class GroupDetailTest(APITestCase):
             title="finance",
             description="this is for finance developers",
         )
+        self.group_six = Group.objects.create(
+            title="UiUx",
+            description="this is for UiUx users",
+        )
 
-        # گروه حذف‌شده (soft delete)
+        # (soft delete)
         self.group_five = Group.objects.create(
             title="deleted_group",
             description="this group will be deleted",
@@ -115,129 +123,288 @@ class GroupDetailTest(APITestCase):
         )
 
     # ============================================================
-    #  GET — دسترسی‌ها
+    #  GET
     # ============================================================
 
-    def test_unauthenticated_user_gets_401(self):
-        """کاربر بدون احراز هویت → 401"""
+    def test_unauthenticated_user1_gets_401(self):
         url = reverse('group-detail', args=[self.group_one.id])
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_regular_user_cant_see_group_detail(self):
-        """کاربر عادی → 403"""
         self.client.force_authenticate(user=self.regular_user)
         url = reverse('group-detail', args=[self.group_one.id])
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_limited_user_cant_see_group_detail(self):
-        """کاربر محدود → 403"""
         self.client.force_authenticate(user=self.limited_user)
         url = reverse('group-detail', args=[self.group_three.id])
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_admin_sees_group_detail(self):
-        """ادمین → 200 و دیتای صحیح"""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-detail', args=[self.group_three.id])
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual('finance', response.data['title'])
 
+    @patch('group_management.views.group_detail.log_critical_event')
+    def test_log_critical_event_receives_correct_group_detail(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[self.group_three.id])
+        response = self.client.get(url, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'GROUP_DETAIL')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'success')
+        self.assertEqual(mock_log.call_args.kwargs['extra']['group_id'], self.group_three.id)
+
     def test_super_admin_sees_group_detail(self):
-        """سوپر ادمین → 200 و دیتای صحیح"""
         self.client.force_authenticate(user=self.super_admin_user)
-        url = reverse('group-detail', args=[self.group_two.id])
+        url = reverse('group-detail', args=[self.group_six.id])
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual('general', response.data['title'])
+        self.assertEqual('UiUx', response.data['title'])
+        self.assertEqual('uiux', response.data['title_normalized'])
+        self.assertEqual('this is for UiUx users', response.data['description'])
+        self.assertIsNotNone(response.data['id'])
+        self.assertIsNotNone(response.data['code'])
+        self.assertTrue(response.data['is_active'])
+        self.assertIsNone(response.data['deleted_at'])
+
 
     def test_get_deleted_group_returns_404(self):
-        """گروه حذف‌شده → 404 (کد 50)"""
         self.client.force_authenticate(user=self.super_admin_user)
         url = reverse('group-detail', args=[self.deleted_group_id])
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['error_code'], 50)
+        self.assertEqual(response.data['error_code'], 65)
+
 
     def test_get_nonexistent_group_returns_404(self):
-        """گروه ناموجود → 404 (کد 50)"""
         self.client.force_authenticate(user=self.super_admin_user)
         url = reverse('group-detail', args=[999])
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['error_code'], 50)
+        self.assertEqual(response.data['error_code'], 65)
 
     # ============================================================
-    #  PATCH — ویرایش
+    #  PATCH
     # ============================================================
+
+    def test_unauthenticated_user2_gets_401(self):
+        url = reverse('group-detail', args=[self.group_three.id])
+        data = {"description": "this is a test group"}
+        response = self.client.patch(url,data,format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_admin_can_update_group(self):
-        """ادمین می‌تونه گروه رو ویرایش کنه → 200"""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-detail', args=[self.group_one.id])
-        valid_data = {"title": "backend_v2"}
+        valid_data = {"title": "backend_v2","description":"this is for backend developers"}
         response = self.client.patch(url, valid_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['title'], 'backend_v2')
+        self.assertEqual(response.data['description'],"this is for backend developers")
+
+    def test_super_admin_can_update_group(self):
+        self.client.force_authenticate(user=self.super_admin_user)
+        url = reverse('group-detail', args=[self.group_two.id])
+        valid_data = {"title": "Liorad","description":"this is for unique developers"}
+        response = self.client.patch(url, valid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @patch('group_management.views.group_detail.log_critical_event')
+    def test_log_critical_event_receives_correct_group_update(self, mock_log):
+        self.client.force_authenticate(user=self.super_admin_user)
+        url = reverse('group-detail', args=[self.group_two.id])
+        payload = {"title": "Liorad","description":"this is for unique developers"}
+        response = self.client.patch(url,payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'],'GROUP_UPDATE')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'success')
+        self.assertEqual(mock_log.call_args.kwargs['extra']['group_id'], self.group_two.id)
+
 
     def test_update_invalid_data_returns_400(self):
-        """داده نامعتبر → 400 (کد 10)"""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-detail', args=[self.group_one.id])
-        invalid_data = {"title": ""}  # فرضاً title نمی‌تونه خالی باشه
+        invalid_data = {"title": ""}
         response = self.client.patch(url, invalid_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error_code'], 10)
+        self.assertEqual(response.data['error_code'],10)
+
+    def test_update_invalid_group_error_code_65(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[999])
+        data = {"title": "migrate"}
+        response = self.client.patch(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 65)
+
+    @patch('group_management.views.group_detail.log_critical_event')
+    def test_log_critical_event_receives_wrong_group_update(self, mock_log):
+        self.client.force_authenticate(user=self.super_admin_user)
+        url = reverse('group-detail', args=[999])
+        payload = {"title": "migrate"}
+        response = self.client.patch(url,payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'GROUP_UPDATE')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'failed')
+        self.assertEqual(mock_log.call_args.kwargs['error_code'], 65)
+
+
+    def test_update_soft_deleted_group_error_code_65(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[self.group_five.id])
+        data = {"title": "migrate"}
+        response = self.client.patch(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 65)
 
     def test_update_deleted_group_returns_404(self):
-        """ویرایش گروه حذف‌شده → 404"""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-detail', args=[self.deleted_group_id])
         response = self.client.patch(url, {"title": "x"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_regular_user_cant_update_group(self):
-        """کاربر عادی نمی‌تونه ویرایش کنه → 403"""
         self.client.force_authenticate(user=self.regular_user)
         url = reverse('group-detail', args=[self.group_one.id])
         response = self.client.patch(url, {"title": "x"}, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_limited_user_cant_update_group(self):
+        self.client.force_authenticate(user=self.limited_user)
+        url = reverse('group-detail', args=[self.group_five.id])
+        response = self.client.patch(url, {"title": "x"}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('group_management.views.group_detail.log_critical_event')
+    def test_validation_failure_logs_correct_action_name(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[self.group_six.id])
+        response = self.client.patch(url, {'title': ''}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'GROUP_UPDATE')
+
+
+    def test_update_group_with_duplicate_title_returns_error(self):
+        """
+         Test that updating a group with a title that already exists
+         returns a validation error
+         """
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[self.group_one.id])
+        valid_data = {"title": "general"}
+        response = self.client.patch(url, valid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+
+    def test_update_group_with_duplicate_title_returns_error(self):
+        """
+         Test that updating a group with a title that already exists
+         returns a validation error
+         """
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[self.group_one.id])
+        valid_data = {"title": "general"}
+        response = self.client.patch(url, valid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error_code'], 10)
+
+
     # ============================================================
-    #  DELETE — حذف منطقی
+    #  DELETE
     # ============================================================
 
+    def test_unauthenticated_user3_gets_401(self):
+        url = reverse('group-detail', args=[self.group_three.id])
+        response = self.client.delete(url,format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_admin_can_delete_group(self):
-        """ادمین می‌تونه گروه رو حذف کنه → 204"""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-detail', args=[self.group_one.id])
         response = self.client.delete(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
-        # بررسی اینکه واقعاً soft delete شده
         self.group_one.refresh_from_db()
         self.assertIsNotNone(self.group_one.deleted_at)
+        response2=self.client.get(url, format='json')
+        self.assertEqual(response2.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch('group_management.views.group_detail.log_critical_event')
+    def test_validation_success_logs_successful_soft_delete(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[self.group_one.id])
+        response = self.client.delete(url,format='json')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'GROUP_DELETE')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'success')
+        self.assertEqual(mock_log.call_args.kwargs['user_id'], self.admin_user.id)
+        self.assertEqual(mock_log.call_args.kwargs['extra'], {"group_id": self.group_one.id})
+
+
 
     def test_delete_already_deleted_group_returns_404(self):
-        """حذف گروهی که قبلاً حذف شده → 404"""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-detail', args=[self.deleted_group_id])
         response = self.client.delete(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_delete_nonexistent_group_returns_404(self):
-        """حذف گروه ناموجود → 404"""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-detail', args=[999])
         response = self.client.delete(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_regular_user_cant_delete_group(self):
-        """کاربر عادی نمی‌تونه حذف کنه → 403"""
         self.client.force_authenticate(user=self.regular_user)
         url = reverse('group-detail', args=[self.group_one.id])
         response = self.client.delete(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_limited_user_cant_delete_group(self):
+        self.client.force_authenticate(user=self.limited_user)
+        url = reverse('group-detail', args=[self.group_five.id])
+        response = self.client.delete(url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unavailable_group_can_not_be_soft_delete_404(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[self.group_five.id])
+        data = {"title": "migrate"}
+        response = self.client.delete(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_nonexistent_group_delete_returns_error_code_65(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[999])
+        data = {"title": "migrate"}
+        response = self.client.delete(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 65)
+
+    @patch('group_management.views.group_detail.log_critical_event')
+    def test_delete_nonexistent_group_logs_failure(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-detail', args=[999])
+        response = self.client.delete(url,format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'GROUP_DELETE')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'failed')
+        self.assertEqual(mock_log.call_args.kwargs['user_id'], self.admin_user.id)
+        self.assertEqual(mock_log.call_args.kwargs['extra'], {"group_id": 999})

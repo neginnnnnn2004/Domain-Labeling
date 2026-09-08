@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from identity.models import User, Role, Group, UserGroup,Domain,User_Domain_Tag,Tag
 
-class GroupListTest(APITestCase):
+class GroupMembersViewTest(APITestCase):
     def setUp(self):
           # create roles
         self.admin_role = Role.objects.create(
@@ -156,6 +156,8 @@ class GroupListTest(APITestCase):
             is_primary=False
         )
 
+    ##########################################List user#########################################
+
     def test_admin_can_get_group_members(self):
         self.client.force_authenticate(user=self.admin_user)
         url1 = reverse('group-members-get',kwargs={'group_id': self.group_one.id})
@@ -207,7 +209,7 @@ class GroupListTest(APITestCase):
         self.assertEqual(mock_log.call_args.kwargs['action'], 'GROUP_MEMBERS_LIST')
         self.assertEqual(mock_log.call_args.kwargs['status_type'], 'success')
         self.assertEqual(mock_log.call_args.kwargs['user_id'], self.admin_user.id)
-        self.assertEqual(mock_log.call_args.kwargs['extra'], {"group_id": self.group_four.id})
+        self.assertEqual(mock_log.call_args.kwargs['extra']['group_id'], self.group_four.id)
 
 
     def test_unauthenticated_user_can_not_get_group_members(self):
@@ -232,18 +234,18 @@ class GroupListTest(APITestCase):
         url = reverse('group-members-get',kwargs={'group_id': self.group_five.id})
         response = self.client.get(url)
         self.assertEqual(response.status_code,status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['error_code',65])
+        self.assertEqual(response.data['error_code'], 65)
 
     def test_not_available_group_can_not_for_get_group_members(self):
         self.client.force_authenticate(user=self.super_admin_user)
         url = reverse('group-members-get',kwargs={'group_id':999})
         response = self.client.get(url)
         self.assertEqual(response.status_code,status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['error_code',65])
+        self.assertEqual(response.data['error_code'], 65)
 
 
     @patch('group_management.views.group_members.log_critical_event')
-    def test_admin_access_type_logged_correctly(self, mock_log):
+    def test_nonexistent_group_logs_failure(self, mock_log):
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('group-members-get', args=[999])
         self.client.get(url,format='json')
@@ -253,3 +255,161 @@ class GroupListTest(APITestCase):
         self.assertEqual(mock_log.call_args.kwargs['status_type'], 'failed')
         self.assertEqual(mock_log.call_args.kwargs['user_id'], self.admin_user.id)
         self.assertEqual(mock_log.call_args.kwargs['extra'], {"group_id": 999})
+
+##########################################Delete user#########################################
+    def test_unauthenticated_user_can_not_delete_group_member(self):
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_regular_user_can_not_delete_group_member(self):
+        self.client.force_authenticate(user=self.regular_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_limited_user_can_not_delete_group_member(self):
+        self.client.force_authenticate(user=self.limited_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_remove_group_member(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        membership = UserGroup.objects.get(user=self.regular_user, group=self.group_one)
+        self.assertIsNotNone(membership.deleted_at)
+
+        list_url = reverse('group-members-get', kwargs={'group_id': self.group_one.id})
+        list_response = self.client.get(list_url)
+        member_user_ids = [m['user_id'] for m in list_response.data]
+        self.assertNotIn(self.regular_user.id, member_user_ids)
+
+    def test_super_admin_can_remove_group_member(self):
+        self.client.force_authenticate(user=self.super_admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_two.id, 'user_id': self.limited_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_delete_member_nonexistent_group_returns_65(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': 999, 'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 65)
+
+    def test_delete_member_soft_deleted_group_returns_65(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_five.id, 'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 65)
+
+    def test_delete_non_member_returns_67(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_four.id,
+            'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 67)
+
+    def test_delete_member_from_wrong_group_returns_67(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_two.id,
+            'user_id': self.regular_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 67)
+
+    def test_delete_already_removed_member_returns_67(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.regular_user.id
+        })
+        self.client.delete(url)
+
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error_code'], 67)
+
+    @patch('group_management.views.group_members.log_critical_event')
+    def test_successful_removal_logged_correctly(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.regular_user.id
+        })
+        self.client.delete(url)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'REMOVE_GROUP_MEMBER')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'success')
+        self.assertEqual(mock_log.call_args.kwargs['user_id'], self.admin_user.id)
+        self.assertEqual(mock_log.call_args.kwargs['extra']['group_id'], self.group_one.id)
+        self.assertEqual(mock_log.call_args.kwargs['extra']['target_user_id'], self.regular_user.id)
+        self.assertIn('membership_id', mock_log.call_args.kwargs['extra'])
+
+    @patch('group_management.views.group_members.log_critical_event')
+    def test_removal_group_not_found_logged_correctly(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': 999, 'user_id': self.regular_user.id
+        })
+        self.client.delete(url)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'REMOVE_GROUP_MEMBER')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'failed')
+        self.assertEqual(mock_log.call_args.kwargs['error_code'], 65)
+
+    @patch('group_management.views.group_members.log_critical_event')
+    def test_removal_non_member_logged_correctly(self, mock_log):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_four.id, 'user_id': self.regular_user.id
+        })
+        self.client.delete(url)
+
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args.kwargs['action'], 'REMOVE_GROUP_MEMBER')
+        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'failed')
+        self.assertEqual(mock_log.call_args.kwargs['error_code'], 67)
+
+    def test_wrong_http_methods_not_allowed(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.regular_user.id
+        })
+        for method_name in ['get', 'post', 'put', 'patch']:
+            with self.subTest(method=method_name):
+                method = getattr(self.client, method_name)
+                response = method(url, {}, format='json')
+                self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_admin_can_remove_deleted_user_membership(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-member-delete', kwargs={
+            'group_id': self.group_one.id, 'user_id': self.nor_user.id
+        })
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)

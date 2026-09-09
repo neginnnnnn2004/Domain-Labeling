@@ -132,7 +132,7 @@ class GroupDomainAssignView(APIView):
                 })
                 continue
 
-            if domain.groups_id == group.id:
+            if domain.group_id == group.id:
                 errors.append({
                     "operation": "add",
                     "index": index,
@@ -174,7 +174,7 @@ class GroupDomainAssignView(APIView):
                 })
                 continue
 
-            if domain.groups_id != group.id:
+            if domain.group_id != group.id:
                 errors.append({
                     "operation": "remove",
                     "index": index,
@@ -208,18 +208,18 @@ class GroupDomainAssignView(APIView):
         # ---- Apply changes atomically ----
         with transaction.atomic():
             for domain in domains_to_add:
-                domain.groups = group
+                domain.group = group
                 domain.updated_at = timezone.now()
 
             if domains_to_add:
-                Domain.objects.bulk_update(domains_to_add, ['groups', 'updated_at'])
+                Domain.objects.bulk_update(domains_to_add, ['group', 'updated_at'])
 
             for domain in domains_to_remove:
-                domain.groups = None
+                domain.group = None
                 domain.updated_at = timezone.now()
 
             if domains_to_remove:
-                Domain.objects.bulk_update(domains_to_remove, ['groups', 'updated_at'])
+                Domain.objects.bulk_update(domains_to_remove, ['group', 'updated_at'])
 
         log_critical_event(
             action="GROUP_DOMAIN_ASSIGN",

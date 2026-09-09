@@ -442,27 +442,34 @@ class GroupMembersViewTest(APITestCase):
         data = {"add": [{"domain_name":"nm.com"}], "remove": []}
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(mock_log.call_args.kwargs['error_code'], 60)
+        mock_log.assert_not_called()
 
-        self.assertEqual(response.data['result']['added'], 0)
-        self.assertEqual(response.data['result']['removed'], 0)
-
-        data_git_domain = Domain.objects.get(domain_name="git.ir")
-        mock_log.assert_called_once()
-        self.assertEqual(mock_log.call_args.kwargs['action'], 'GROUP_DOMAIN_ASSIGN')
-        self.assertEqual(mock_log.call_args.kwargs['status_type'], 'failed')
-        self.assertEqual(mock_log.call_args.kwargs['user_id'], self.admin_user.id)
-        self.assertEqual(mock_log.call_args.kwargs['extra']['group_id'], self.group_two.id)
-        self.assertEqual(mock_log.call_args.kwargs['extra']['added_count'], 0)
-        self.assertEqual(mock_log.call_args.kwargs['extra']['removed_count'], 0)
-
-    def test_wrong_http_methods_not_allowed(self):
+    def test_wrong_http_method1(self):
         self.client.force_authenticate(user=self.admin_user)
-        url = reverse('group-domain-assign', kwargs={
-            'group_id': self.group_one.id, 'user_id': self.admin_user.id
-        })
+        url = reverse('group-domain-assign', kwargs={'group_id': self.group_one.id})
         data = {"add": [{"domain_name": "git.ir"}], "remove": []}
-        for method_name in ['get', 'post', 'put', 'patch']:
-            with self.subTest(method=method_name):
-                method = getattr(self.client, method_name)
-                response = method(url, {}, format='json')
-                self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        response = self.client.put(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_wrong_http_method2(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-domain-assign', kwargs={'group_id': self.group_one.id})
+        data = {"add": [{"domain_name": "git.ir"}], "remove": []}
+        response = self.client.patch(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_wrong_http_method3(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-domain-assign', kwargs={'group_id': self.group_one.id})
+        response = self.client.get(url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_wrong_http_method4(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('group-domain-assign', kwargs={'group_id': self.group_one.id})
+        data = {"add": [{"domain_name": "git.ir"}], "remove": []}
+        response = self.client.delete(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+

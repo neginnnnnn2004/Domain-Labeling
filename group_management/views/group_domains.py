@@ -125,7 +125,7 @@ class GroupDomainView(APIView):
 
         # Get Domains
 
-        domains = Domain.objects.filter(groups=group, deleted_at__isnull=True).distinct()
+        domains = Domain.objects.filter(group=group, deleted_at__isnull=True)
         result = []
 
         # Domain + Tag Visibility

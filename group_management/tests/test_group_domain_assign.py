@@ -443,7 +443,7 @@ class GroupMembersViewTest(APITestCase):
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(mock_log.call_args.kwargs['error_code'], 60)
-        mock_log.assert_not_called()
+        mock_log.assert_called_once()
 
     def test_wrong_http_method1(self):
         self.client.force_authenticate(user=self.admin_user)

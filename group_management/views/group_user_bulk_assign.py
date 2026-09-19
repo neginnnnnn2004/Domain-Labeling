@@ -61,203 +61,218 @@ class GroupUserAssignView(APIView):
         }
     )
     def post(self, request, group_id):
-        group = self.get_group(group_id)
-        if not group:
-            log_critical_event(
-                action="GROUP_USER_ASSIGN",
-                status_type='failed',
-                request=request,
-                user_id=request.user.id,
-                error_code=65,
-                extra={'group_id': group_id},
-            )
-            return Response({
-                "error_code": 65,
-                "message": {
-                    "fa": "گروه مورد نظر یافت نشد.",
-                    "en": "The requested group was not found."
-                },
-            }, status=status.HTTP_404_NOT_FOUND)
+        try:
+            group = self.get_group(group_id)
+            if not group:
+                log_critical_event(
+                    action="GROUP_USER_ASSIGN",
+                    status_type='failed',
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=65,
+                    extra={'group_id': group_id},
+                )
+                return Response({
+                    "error_code": 65,
+                    "message": {
+                        "fa": "گروه مورد نظر یافت نشد.",
+                        "en": "The requested group was not found."
+                    },
+                }, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = GroupUserAssignSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response({
-                "error_code": 60,
-                "message": {
-                    "fa": "اطلاعات ارسال شده نامعتبر است.",
-                    "en": "The submitted data is invalid."
-                },
-                "detail": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+            serializer = GroupUserAssignSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({
+                    "error_code": 60,
+                    "message": {
+                        "fa": "اطلاعات ارسال شده نامعتبر است.",
+                        "en": "The submitted data is invalid."
+                    },
+                    "detail": serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-        data = serializer.validated_data
-        add_items = data.get("add", [])
-        remove_items = data.get("remove", [])
+            data = serializer.validated_data
+            add_items = data.get("add", [])
+            remove_items = data.get("remove", [])
 
-        errors = []
-        users_to_add = []
-        memberships_to_remove = []
+            errors = []
+            users_to_add = []
+            memberships_to_remove = []
 
-        seen_ids = set()
+            seen_ids = set()
 
-        # ---- Validate ADD ----
-        for index, item in enumerate(add_items):
-            user_id = item.get("user_id")
-            is_primary = item.get("is_primary", False)
+            # ---- Validate ADD ----
+            for index, item in enumerate(add_items):
+                user_id = item.get("user_id")
+                is_primary = item.get("is_primary", False)
 
-            if user_id in seen_ids:
-                errors.append({
-                    "operation": "add",
-                    "index": index,
-                    "user_id": user_id,
-                    "fa": f"کاربر «{user_id}» بیش از یک‌بار در درخواست تکرار شده است.",
-                    "en": f"User «{user_id}» is duplicated in the request."
-                })
-                continue
-
-            target_user = User.objects.filter(
-                pk=user_id,
-                deleted_at__isnull=True
-            ).first()
-
-            if not target_user:
-                errors.append({
-                    "operation": "add",
-                    "index": index,
-                    "user_id": user_id,
-                    "fa": f"کاربر «{user_id}» یافت نشد.",
-                    "en": f"User «{user_id}» was not found."
-                })
-                continue
-
-            already_member = UserGroup.objects.filter(
-                user=target_user,
-                group=group,
-                deleted_at__isnull=True
-            ).exists()
-
-            if already_member:
-                errors.append({
-                    "operation": "add",
-                    "index": index,
-                    "user_id": user_id,
-                    "fa": f"کاربر «{user_id}» از قبل عضو این گروه است.",
-                    "en": f"User «{user_id}» is already assigned to this group."
-                })
-                continue
-
-            # ---- Business rule: at most one active primary group ----
-            # bulk_create bypasses UserGroupSerializer.validate(), so this
-            # rule must be enforced here explicitly.
-            if is_primary:
-                has_other_primary = UserGroup.objects.filter(
-                    user=target_user,
-                    is_primary=True,
-                    deleted_at__isnull=True
-                ).exists()
-
-                if has_other_primary:
+                if user_id in seen_ids:
                     errors.append({
                         "operation": "add",
                         "index": index,
                         "user_id": user_id,
-                        "fa": f"کاربر «{user_id}» در حال حاضر یک گروه اصلی دارد.",
-                        "en": f"User «{user_id}» already has a primary group."
+                        "fa": f"کاربر «{user_id}» بیش از یک‌بار در درخواست تکرار شده است.",
+                        "en": f"User «{user_id}» is duplicated in the request."
                     })
                     continue
 
-            seen_ids.add(user_id)
-            users_to_add.append((target_user, is_primary))
+                target_user = User.objects.filter(
+                    pk=user_id,
+                    deleted_at__isnull=True
+                ).first()
 
-        # ---- Validate REMOVE ----
-        for index, item in enumerate(remove_items):
-            user_id = item.get("user_id")
+                if not target_user:
+                    errors.append({
+                        "operation": "add",
+                        "index": index,
+                        "user_id": user_id,
+                        "fa": f"کاربر «{user_id}» یافت نشد.",
+                        "en": f"User «{user_id}» was not found."
+                    })
+                    continue
 
-            if user_id in seen_ids:
-                errors.append({
-                    "operation": "remove",
-                    "index": index,
-                    "user_id": user_id,
-                    "fa": f"کاربر «{user_id}» بیش از یک‌بار در درخواست تکرار شده است.",
-                    "en": f"User «{user_id}» is duplicated in the request."
-                })
-                continue
+                already_member = UserGroup.objects.filter(
+                    user=target_user,
+                    group=group,
+                    deleted_at__isnull=True
+                ).exists()
 
-            membership = UserGroup.objects.filter(
-                user_id=user_id,
-                group=group,
-                deleted_at__isnull=True
-            ).first()
+                if already_member:
+                    errors.append({
+                        "operation": "add",
+                        "index": index,
+                        "user_id": user_id,
+                        "fa": f"کاربر «{user_id}» از قبل عضو این گروه است.",
+                        "en": f"User «{user_id}» is already assigned to this group."
+                    })
+                    continue
 
-            if not membership:
-                errors.append({
-                    "operation": "remove",
-                    "index": index,
-                    "user_id": user_id,
-                    "fa": f"کاربر «{user_id}» عضو این گروه نیست.",
-                    "en": f"User «{user_id}» does not belong to this group."
-                })
-                continue
+                # ---- Business rule: at most one active primary group ----
+                # bulk_create bypasses UserGroupSerializer.validate(), so this
+                # rule must be enforced here explicitly.
+                if is_primary:
+                    has_other_primary = UserGroup.objects.filter(
+                        user=target_user,
+                        is_primary=True,
+                        deleted_at__isnull=True
+                    ).exists()
 
-            seen_ids.add(user_id)
-            memberships_to_remove.append(membership)
+                    if has_other_primary:
+                        errors.append({
+                            "operation": "add",
+                            "index": index,
+                            "user_id": user_id,
+                            "fa": f"کاربر «{user_id}» در حال حاضر یک گروه اصلی دارد.",
+                            "en": f"User «{user_id}» already has a primary group."
+                        })
+                        continue
 
-        if errors:
+                seen_ids.add(user_id)
+                users_to_add.append((target_user, is_primary))
+
+            # ---- Validate REMOVE ----
+            for index, item in enumerate(remove_items):
+                user_id = item.get("user_id")
+
+                if user_id in seen_ids:
+                    errors.append({
+                        "operation": "remove",
+                        "index": index,
+                        "user_id": user_id,
+                        "fa": f"کاربر «{user_id}» بیش از یک‌بار در درخواست تکرار شده است.",
+                        "en": f"User «{user_id}» is duplicated in the request."
+                    })
+                    continue
+
+                membership = UserGroup.objects.filter(
+                    user_id=user_id,
+                    group=group,
+                    deleted_at__isnull=True
+                ).first()
+
+                if not membership:
+                    errors.append({
+                        "operation": "remove",
+                        "index": index,
+                        "user_id": user_id,
+                        "fa": f"کاربر «{user_id}» عضو این گروه نیست.",
+                        "en": f"User «{user_id}» does not belong to this group."
+                    })
+                    continue
+
+                seen_ids.add(user_id)
+                memberships_to_remove.append(membership)
+
+            if errors:
+                log_critical_event(
+                    action="GROUP_USER_ASSIGN",
+                    status_type='failed',
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=60,
+                    extra={'group_id': group.id, 'errors': errors},
+                )
+                return Response({
+                    "error_code": 60,
+                    "message": {
+                        "fa": "برخی از تغییرات معتبر نیستند.",
+                        "en": "Some changes are invalid."
+                    },
+                    "detail": errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # ---- Apply changes atomically ----
+            with transaction.atomic():
+                if users_to_add:
+                    UserGroup.objects.bulk_create([
+                        UserGroup(
+                            user=target_user,
+                            group=group,
+                            assigned_by=request.user,
+                            is_primary=is_primary,
+                        )
+                        for target_user, is_primary in users_to_add
+                    ])
+
+                if memberships_to_remove:
+                    now = timezone.now()
+                    for membership in memberships_to_remove:
+                        membership.deleted_at = now
+                    UserGroup.objects.bulk_update(memberships_to_remove, ['deleted_at'])
+
             log_critical_event(
                 action="GROUP_USER_ASSIGN",
-                status_type='failed',
+                status_type='success',
                 request=request,
                 user_id=request.user.id,
-                error_code=60,
-                extra={'group_id': group.id, 'errors': errors},
-            )
-            return Response({
-                "error_code": 60,
-                "message": {
-                    "fa": "برخی از تغییرات معتبر نیستند.",
-                    "en": "Some changes are invalid."
+                extra={
+                    'group_id': group.id,
+                    'added_count': len(users_to_add),
+                    'removed_count': len(memberships_to_remove),
                 },
-                "detail": errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+            )
 
-        # ---- Apply changes atomically ----
-        with transaction.atomic():
-            if users_to_add:
-                UserGroup.objects.bulk_create([
-                    UserGroup(
-                        user=target_user,
-                        group=group,
-                        assigned_by=request.user,
-                        is_primary=is_primary,
-                    )
-                    for target_user, is_primary in users_to_add
-                ])
+            return Response({
+                "message": {
+                    "fa": "تغییرات با موفقیت اعمال شد.",
+                    "en": "Changes were applied successfully."
+                },
+                "result": {
+                    "added": len(users_to_add),
+                    "removed": len(memberships_to_remove),
+                }
+            }, status=status.HTTP_200_OK)
 
-            if memberships_to_remove:
-                now = timezone.now()
-                for membership in memberships_to_remove:
-                    membership.deleted_at = now
-                UserGroup.objects.bulk_update(memberships_to_remove, ['deleted_at'])
-
-        log_critical_event(
-            action="GROUP_USER_ASSIGN",
-            status_type='success',
-            request=request,
-            user_id=request.user.id,
-            extra={
-                'group_id': group.id,
-                'added_count': len(users_to_add),
-                'removed_count': len(memberships_to_remove),
-            },
-        )
-
-        return Response({
-            "message": {
-                "fa": "تغییرات با موفقیت اعمال شد.",
-                "en": "Changes were applied successfully."
-            },
-            "result": {
-                "added": len(users_to_add),
-                "removed": len(memberships_to_remove),
-            }
-        }, status=status.HTTP_200_OK)
+        except Exception:
+            log_critical_event(
+                action="GROUP_USER_ASSIGN",
+                status_type='error',
+                request=request,
+                user_id=request.user.id,
+                error_code='GROUP_USER_ASSIGN_FAILED',
+                extra={'group_id': group_id},
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

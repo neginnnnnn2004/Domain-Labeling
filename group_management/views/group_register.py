@@ -34,37 +34,51 @@ class GroupRegisterView(APIView):
         }
     )
     def post(self, request):
-        serializer = GroupCreateSerializer(data=request.data)
-        if not serializer.is_valid():
+        try:
+            serializer = GroupCreateSerializer(data=request.data)
+            if not serializer.is_valid():
+                log_critical_event(
+                    action="group_register",
+                    status_type='failed',
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=10,
+                    extra={
+                        'validation_errors': serializer.errors,
+                    }
+                )
+                return Response({
+                    "error_code": 10,
+                    "message": {
+                        "fa": "اطلاعات ارسالی برای ایجاد گروه معتبر نیست.",
+                        "en": "The submitted information is not valid for creating a group."
+                    },
+                    "detail": serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            group = serializer.save()
+
             log_critical_event(
                 action="group_register",
-                status_type='failed',
+                status_type='success',
                 request=request,
                 user_id=request.user.id,
-                error_code=10,
                 extra={
-                    'validation_errors': serializer.errors,
+                    "group_id": group.id,
+                    "group_name": getattr(group, 'title', None),
                 }
             )
-            return Response({
-                "error_code": 10,
-                "message": {
-                    "fa": "اطلاعات ارسالی برای ایجاد گروه معتبر نیست.",
-                    "en": "The submitted information is not valid for creating a group."
-                },
-                "detail": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(GroupResponseSerializer(group).data, status=status.HTTP_201_CREATED)
 
-        group = serializer.save()
-
-        log_critical_event(
-            action="group_register",
-            status_type='success',
-            request=request,
-            user_id=request.user.id,
-            extra={
-                "group_id": group.id,
-                "group_name": getattr(group, 'title',None),
-            }
-        )
-        return Response(GroupResponseSerializer(group).data, status=status.HTTP_201_CREATED)
+        except Exception:
+            log_critical_event(
+                action="group_register",
+                status_type='error',
+                request=request,
+                user_id=request.user.id,
+                error_code='GROUP_REGISTER_FAILED',
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

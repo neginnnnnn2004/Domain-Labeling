@@ -75,6 +75,14 @@ class GroupRegisterViewTest(APITestCase):
             status="active",
             role=self.limited_role
         )
+        self.none_role_user = User.objects.create_user(
+            username="none_role_user",
+            password="password123",
+            email="none_role@test.com",
+            phone="09666666666",
+            status="active",
+            role=None
+        )
 
         # create_group
         self.group_one= Group.objects.create(
@@ -213,3 +221,26 @@ class GroupRegisterViewTest(APITestCase):
         response = self.client.delete(self.register_group_url, valid_data4, format='json')
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertNotContains(response, 'Back',status_code=405)
+
+    def test_pending_admin_can_not_register_group(self):
+        self.admin_user.status = 'pending'
+        self.admin_user.save()
+        self.client.force_authenticate(user=self.admin_user)
+        valid_data = {'title': 'AI', 'description': 'this is for AI developers'}
+        response = self.client.post(self.register_group_url, valid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unsuccessful_register_none_role(self):
+        self.client.force_authenticate(user=self.none_role_user)
+        valid_data = {'title': 'AI', 'description': 'this is for AI developers'}
+        response = self.client.post(self.register_group_url, valid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('group_management.views.group_register.log_critical_event')
+    @patch('group_management.views.group_register.GroupCreateSerializer')
+    def test_returns_500_on_unexpected_exception(self, mock_serializer, mock_log):
+        mock_serializer.side_effect = Exception("boom")
+        self.client.force_authenticate(user=self.admin_user)
+        valid_data = {'title': 'AI', 'description': 'this is for AI developers'}
+        response = self.client.post(self.register_group_url, valid_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)

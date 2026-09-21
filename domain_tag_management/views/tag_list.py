@@ -22,15 +22,28 @@ class ListOfTagView(APIView):
             401: "Unauthorized",
         }
     )
+    def get(self, request):
+        try:
+            tags = Tag.objects.filter(is_active=True, deleted_at__isnull=True).order_by('title')
+            serializer = TagListSerializer(tags, many=True)
 
-    def get(self,request):
-        tags= Tag.objects.filter(is_active=True,deleted_at__isnull=True).order_by('title')
-        serializer = TagListSerializer(tags , many=True)
+            log_critical_event(
+                action="LIST_TAG",
+                status_type="success",
+                request=request,
+                user_id=request.user.id,
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-        log_critical_event(
-            action="LIST_TAG",
-            status_type="success",
-            request=request,
-            user_id=request.user.id,
-        )
-        return Response(serializer.data , status=status.HTTP_200_OK)
+        except Exception:
+            log_critical_event(
+                action="LIST_TAG",
+                status_type="error",
+                request=request,
+                user_id=request.user.id,
+                error_code="LIST_TAG_FAILED",
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

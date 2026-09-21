@@ -66,7 +66,7 @@ class TagUpdateViewTest(APITestCase):
         self.assertEqual(response.data['error_code'], 55)
 
     # ===========================================================
-    # PATCH — soft-deleted tag (رفتار فعلی: پیدا و قابل‌ویرایش می‌شود)
+    # PATCH — soft-deleted tag
     # ===========================================================
 
     def test_edit_soft_deleted_tag_currently_succeeds(self):
@@ -196,7 +196,7 @@ class TagUpdateViewTest(APITestCase):
         self.assertFalse(self.tag_one.is_active)
 
     # ===========================================================
-    # DELETE — از‌قبل حذف‌شده (رفتار فعلی: بدون خطا دوباره حذف می‌شود)
+    # DELETE
     # ===========================================================
 
     def test_delete_already_deleted_tag_currently_succeeds_again(self):
@@ -227,7 +227,7 @@ class TagUpdateViewTest(APITestCase):
         self.assertEqual(kwargs['error_code'], 55)
 
     # ===========================================================
-    # Exception (بعد از اضافه کردن try/except به هر دو متد)
+    # Exception
     # ===========================================================
 
     @patch('domain_tag_management.views.tag_edit_or_delete.log_critical_event')

@@ -25,6 +25,7 @@ class DomainImportOrEditSerializer(serializers.ModelSerializer):
 
         group (int):
             Primary key of the group associated with the domain.
+            Only active (non soft-deleted) groups are accepted.
 
     """
 
@@ -33,7 +34,7 @@ class DomainImportOrEditSerializer(serializers.ModelSerializer):
     )
 
     group = serializers.PrimaryKeyRelatedField(
-        queryset=Group.objects.all(),
+        queryset=Group.objects.filter(deleted_at__isnull=True),
         required=False,
         allow_null=True,
     )
@@ -60,3 +61,4 @@ class DomainDeleteSerializer(serializers.Serializer):
     Attributes:
         domain_name (str): The unique name of the domain to be deleted.
     """
+    domain_name = serializers.CharField()

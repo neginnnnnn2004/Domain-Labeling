@@ -146,6 +146,11 @@ import_response_schema = openapi.Schema(
             example=2,
         ),
 
+        "reactivated_count": openapi.Schema(
+            type=openapi.TYPE_INTEGER,
+            example=1,
+        ),
+
         "skipped_count": openapi.Schema(
             type=openapi.TYPE_INTEGER,
             example=1,
@@ -162,6 +167,14 @@ import_response_schema = openapi.Schema(
         "created_domains": openapi.Schema(
             type=openapi.TYPE_ARRAY,
             items=domain_response_schema,
+        ),
+
+        "reactivated_domains": openapi.Schema(
+            type=openapi.TYPE_ARRAY,
+            items=openapi.Schema(
+                type=openapi.TYPE_STRING
+            ),
+            example=["revived.com"],
         ),
     },
 )
@@ -261,6 +274,10 @@ class ImportOrEditDomainView(APIView):
 
         Duplicate domains are automatically skipped.
 
+        If a submitted domain matches a previously soft-deleted
+        domain, it is reactivated (deleted_at is cleared) instead
+        of being rejected or causing a database conflict.
+
         URLs such as:
             https://www.example.com
             http://example.com
@@ -291,90 +308,168 @@ class ImportOrEditDomainView(APIView):
         },
     )
     def post(self, request):
+        try:
+            raw_data = request.data
 
-        raw_data = request.data
+            is_many = isinstance(raw_data, list)
 
-        is_many = isinstance(raw_data, list)
+            items = raw_data if is_many else [raw_data]
 
-        items = raw_data if is_many else [raw_data]
-
-        existing_domains = set(
-            Domain.objects
-            .filter(deleted_at__isnull=True)
-            .values_list(
-                "domain_name",
-                flat=True,
-            )
-        )
-
-        seen_in_request = set()
-
-        cleaned_items = []
-
-        skipped_domains = []
-
-        # ----------------------------------------------------
-        # Normalize + remove duplicates
-        # ----------------------------------------------------
-
-        for item in items:
-
-            original_name = item.get(
-                "domain_name",
-                "",
+            active_domains = set(
+                Domain.objects
+                .filter(deleted_at__isnull=True)
+                .values_list(
+                    "domain_name",
+                    flat=True,
+                )
             )
 
-            if not original_name:
-                continue
+            # ----------------------------------------------------
+            # Soft-deleted domains, keyed by domain_name, so a
+            # re-imported domain can be reactivated instead of
+            # colliding with the DB-level unique constraint.
+            # ----------------------------------------------------
 
-            root_domain = extract_root_domain(
-                original_name
+            soft_deleted_domains_qs = Domain.objects.filter(
+                deleted_at__isnull=False
             )
 
-            if (
-                root_domain in existing_domains
-                or root_domain in seen_in_request
-            ):
-                skipped_domains.append(
+            soft_deleted_domains = {
+                domain.domain_name: domain
+                for domain in soft_deleted_domains_qs
+            }
+
+            seen_in_request = set()
+
+            cleaned_items = []
+
+            skipped_domains = []
+
+            domains_to_reactivate = []
+
+            # ----------------------------------------------------
+            # Normalize + remove duplicates + detect reactivation
+            # ----------------------------------------------------
+
+            for item in items:
+
+                original_name = item.get(
+                    "domain_name",
+                    "",
+                )
+
+                if not original_name:
+                    continue
+
+                root_domain = extract_root_domain(
                     original_name
                 )
-                continue
 
-            seen_in_request.add(
-                root_domain
-            )
+                if root_domain in seen_in_request:
+                    skipped_domains.append(
+                        original_name
+                    )
+                    continue
 
-            item_copy = item.copy()
+                if root_domain in active_domains:
+                    seen_in_request.add(
+                        root_domain
+                    )
+                    skipped_domains.append(
+                        original_name
+                    )
+                    continue
 
-            item_copy["domain_name"] = root_domain
+                # ------------------------------------------------
+                # Reactivate a previously soft-deleted domain
+                # ------------------------------------------------
 
-            cleaned_items.append(
-                item_copy
-            )
+                if root_domain in soft_deleted_domains:
 
-        # ----------------------------------------------------
-        # All domains were duplicates
-        # ----------------------------------------------------
+                    domain_instance = soft_deleted_domains[
+                        root_domain
+                    ]
 
-        if not cleaned_items:
+                    domain_instance.deleted_at = None
 
-            log_critical_event(
-                action="IMPORT_DOMAIN",
-                status_type="success",
-                request=request,
-                user_id=request.user.id,
-                extra={
-                    "created_count": 0,
-                    "skipped_count": len(
-                        skipped_domains
-                    ),
-                    "skipped_domains": skipped_domains,
-                },
-            )
+                    domain_instance.description = item.get(
+                        "description",
+                        domain_instance.description,
+                    )
 
-            return Response(
-                {
-                    "message": {
+                    domain_instance.group_id = item.get(
+                        "group",
+                        domain_instance.group_id,
+                    )
+
+                    domain_instance.created_by = request.user
+
+                    domains_to_reactivate.append(
+                        domain_instance
+                    )
+
+                    seen_in_request.add(
+                        root_domain
+                    )
+
+                    continue
+
+                seen_in_request.add(
+                    root_domain
+                )
+
+                item_copy = item.copy()
+
+                item_copy["domain_name"] = root_domain
+
+                cleaned_items.append(
+                    item_copy
+                )
+
+            # ----------------------------------------------------
+            # Reactivate soft-deleted domains (if any)
+            # ----------------------------------------------------
+
+            if domains_to_reactivate:
+
+                with transaction.atomic():
+
+                    Domain.objects.bulk_update(
+                        domains_to_reactivate,
+                        fields=[
+                            "deleted_at",
+                            "description",
+                            "group",
+                            "created_by",
+                        ],
+                    )
+
+            # ----------------------------------------------------
+            # Nothing left to create (all were duplicates or
+            # reactivated)
+            # ----------------------------------------------------
+
+            if not cleaned_items:
+
+                log_critical_event(
+                    action="IMPORT_DOMAIN",
+                    status_type="success",
+                    request=request,
+                    user_id=request.user.id,
+                    extra={
+                        "created_count": 0,
+                        "reactivated_count": len(
+                            domains_to_reactivate
+                        ),
+                        "skipped_count": len(
+                            skipped_domains
+                        ),
+                        "skipped_domains": skipped_domains,
+                    },
+                )
+
+                message = (
+                    {
                         "fa": (
                             "تمامی دامنه‌های ارسالی "
                             "تکراری بوده و از فرآیند "
@@ -385,166 +480,222 @@ class ImportOrEditDomainView(APIView):
                             "duplicates and removed from "
                             "the registration process."
                         ),
-                    },
-
-                    "created_count": 0,
-
-                    "skipped_count": len(
-                        skipped_domains
-                    ),
-
-                    "skipped_domains": skipped_domains,
-
-                    "created_domains": [],
-                },
-
-                status=status.HTTP_200_OK,
-            )
-
-        # ----------------------------------------------------
-        # Validate
-        # ----------------------------------------------------
-
-        serializer = DomainImportOrEditSerializer(
-            data=cleaned_items,
-            many=True,
-        )
-
-        if not serializer.is_valid():
-
-            log_critical_event(
-                action="IMPORT_DOMAIN",
-                status_type="failed",
-                request=request,
-                user_id=request.user.id,
-                error_code=10,
-                extra={
-                    "submitted_domains": [
-                        item.get("domain_name")
-                        for item in cleaned_items
-                    ],
-                    "validation_errors": (
-                        serializer.errors
-                    ),
-                },
-            )
-
-            return Response(
-                {
-                    "error_code": 10,
-
-                    "message": {
+                    }
+                    if not domains_to_reactivate
+                    else {
                         "fa": (
-                            "اطلاعات ارسالی برای "
-                            "ایمپورت دامنه معتبر نیست."
+                            "دامنه‌های حذف‌شده با موفقیت "
+                            "دوباره فعال شدند."
                         ),
                         "en": (
-                            "The submitted data for "
-                            "domain import is not valid."
+                            "Previously deleted domains "
+                            "were reactivated successfully."
                         ),
+                    }
+                )
+
+                return Response(
+                    {
+                        "message": message,
+
+                        "created_count": 0,
+
+                        "reactivated_count": len(
+                            domains_to_reactivate
+                        ),
+
+                        "skipped_count": len(
+                            skipped_domains
+                        ),
+
+                        "skipped_domains": skipped_domains,
+
+                        "created_domains": [],
+
+                        "reactivated_domains": [
+                            domain.domain_name
+                            for domain in domains_to_reactivate
+                        ],
                     },
 
-                    "detail": serializer.errors,
+                    status=status.HTTP_200_OK,
+                )
+
+            # ----------------------------------------------------
+            # Validate
+            # ----------------------------------------------------
+
+            serializer = DomainImportOrEditSerializer(
+                data=cleaned_items,
+                many=True,
+            )
+
+            if not serializer.is_valid():
+
+                log_critical_event(
+                    action="IMPORT_DOMAIN",
+                    status_type="failed",
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=10,
+                    extra={
+                        "submitted_domains": [
+                            item.get("domain_name")
+                            for item in cleaned_items
+                        ],
+                        "validation_errors": (
+                            serializer.errors
+                        ),
+                    },
+                )
+
+                return Response(
+                    {
+                        "error_code": 10,
+
+                        "message": {
+                            "fa": (
+                                "اطلاعات ارسالی برای "
+                                "ایمپورت دامنه معتبر نیست."
+                            ),
+                            "en": (
+                                "The submitted data for "
+                                "domain import is not valid."
+                            ),
+                        },
+
+                        "detail": serializer.errors,
+                    },
+
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # ----------------------------------------------------
+            # Prepare instances
+            # ----------------------------------------------------
+
+            domains_to_create = []
+
+            for validated_data in serializer.validated_data:
+
+                domain_instance = Domain(
+                    **validated_data,
+                    created_by=request.user,
+                )
+
+                domains_to_create.append(
+                    domain_instance
+                )
+
+            # ----------------------------------------------------
+            # Bulk create
+            # ----------------------------------------------------
+
+            with transaction.atomic():
+
+                created_instances = Domain.objects.bulk_create(
+                    domains_to_create
+                )
+
+            created_data = DomainImportOrEditSerializer(
+                created_instances,
+                many=True,
+            ).data
+
+            # ----------------------------------------------------
+            # Unified response
+            # ----------------------------------------------------
+
+            response_payload = {
+
+                "message": {
+                    "fa": (
+                        "فرآیند ایمپورت "
+                        "با موفقیت انجام شد."
+                    ),
+                    "en": (
+                        "The import process "
+                        "completed successfully."
+                    ),
                 },
 
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # ----------------------------------------------------
-        # Prepare instances
-        # ----------------------------------------------------
-
-        domains_to_create = []
-
-        for validated_data in serializer.validated_data:
-
-            domain_instance = Domain(
-                **validated_data,
-                created_by=request.user,
-            )
-
-            domains_to_create.append(
-                domain_instance
-            )
-
-        # ----------------------------------------------------
-        # Bulk create
-        # ----------------------------------------------------
-
-        with transaction.atomic():
-
-            created_instances = Domain.objects.bulk_create(
-                domains_to_create
-            )
-
-        created_data = DomainImportOrEditSerializer(
-            created_instances,
-            many=True,
-        ).data
-
-        # ----------------------------------------------------
-        # Unified response
-        # ----------------------------------------------------
-
-        response_payload = {
-
-            "message": {
-                "fa": (
-                    "فرآیند ایمپورت "
-                    "با موفقیت انجام شد."
-                ),
-                "en": (
-                    "The import process "
-                    "completed successfully."
-                ),
-            },
-
-            "created_count": len(
-                created_instances
-            ),
-
-            "skipped_count": len(
-                skipped_domains
-            ),
-
-            "skipped_domains": skipped_domains,
-
-            "created_domains": created_data,
-        }
-
-        # ----------------------------------------------------
-        # Log
-        # ----------------------------------------------------
-
-        log_critical_event(
-            action="IMPORT_DOMAIN",
-            status_type="success",
-            request=request,
-            user_id=request.user.id,
-            extra={
                 "created_count": len(
                     created_instances
+                ),
+
+                "reactivated_count": len(
+                    domains_to_reactivate
                 ),
 
                 "skipped_count": len(
                     skipped_domains
                 ),
 
-                "created_domains": [
-                    domain.domain_name
-                    for domain in created_instances
-                ],
-
                 "skipped_domains": skipped_domains,
-            },
-        )
 
-        # مهم:
-        # دیگر بر اساس Single/Bulk response متفاوت نیست.
-        return Response(
-            response_payload,
-            status=status.HTTP_201_CREATED,
-        )
+                "created_domains": created_data,
+
+                "reactivated_domains": [
+                    domain.domain_name
+                    for domain in domains_to_reactivate
+                ],
+            }
+
+            # ----------------------------------------------------
+            # Log
+            # ----------------------------------------------------
+
+            log_critical_event(
+                action="IMPORT_DOMAIN",
+                status_type="success",
+                request=request,
+                user_id=request.user.id,
+                extra={
+                    "created_count": len(
+                        created_instances
+                    ),
+
+                    "reactivated_count": len(
+                        domains_to_reactivate
+                    ),
+
+                    "skipped_count": len(
+                        skipped_domains
+                    ),
+
+                    "created_domains": [
+                        domain.domain_name
+                        for domain in created_instances
+                    ],
+
+                    "reactivated_domains": [
+                        domain.domain_name
+                        for domain in domains_to_reactivate
+                    ],
+
+                    "skipped_domains": skipped_domains,
+                },
+            )
+
+            # مهم:
+            # دیگر بر اساس Single/Bulk response متفاوت نیست.
+            return Response(
+                response_payload,
+                status=status.HTTP_201_CREATED,
+            )
+
+        except Exception:
+            log_critical_event(
+                action="IMPORT_DOMAIN",
+                status_type="error",
+                request=request,
+                user_id=request.user.id,
+                error_code="IMPORT_DOMAIN_FAILED",
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     # ========================================================
     # PATCH
@@ -604,205 +755,218 @@ class ImportOrEditDomainView(APIView):
         },
     )
     def patch(self, request):
+        try:
+            data = request.data
 
-        data = request.data
+            is_many = isinstance(
+                data,
+                list,
+            )
 
-        is_many = isinstance(
-            data,
-            list,
-        )
+            items = data if is_many else [data]
 
-        items = data if is_many else [data]
+            updated_domains = []
 
-        updated_domains = []
+            errors = {}
 
-        errors = {}
+            # ----------------------------------------------------
+            # Transaction
+            # ----------------------------------------------------
 
-        # ----------------------------------------------------
-        # Transaction
-        # ----------------------------------------------------
+            with transaction.atomic():
 
-        with transaction.atomic():
+                for index, item in enumerate(items):
 
-            for index, item in enumerate(items):
-
-                domain_name = item.get(
-                    "domain_name"
-                )
-
-                # --------------------------------------------
-                # domain_name required
-                # --------------------------------------------
-
-                if not domain_name:
-
-                    errors[f"item_{index}"] = {
-                        "fa": (
-                            "ارسال فیلد domain_name "
-                            "برای ویرایش الزامی است."
-                        ),
-                        "en": (
-                            "The domain_name field "
-                            "is required for editing."
-                        ),
-                    }
-
-                    continue
-
-                # --------------------------------------------
-                # Find domain
-                # --------------------------------------------
-
-                try:
-
-                    domain_instance = Domain.objects.get(
-                        domain_name=domain_name,
-                        deleted_at__isnull=True,
+                    domain_name = item.get(
+                        "domain_name"
                     )
 
-                except Domain.DoesNotExist:
+                    # --------------------------------------------
+                    # domain_name required
+                    # --------------------------------------------
 
-                    errors[f"item_{index}"] = {
-                        "fa": (
-                            f"دامنه با نام «{domain_name}» "
-                            "یافت نشد."
-                        ),
-                        "en": (
-                            f"Domain with name "
-                            f"«{domain_name}» was not found."
-                        ),
-                    }
+                    if not domain_name:
 
-                    continue
-
-                # --------------------------------------------
-                # Validate
-                # --------------------------------------------
-
-                serializer = DomainImportOrEditSerializer(
-                    domain_instance,
-                    data=item,
-                    partial=True,
-                )
-
-                if not serializer.is_valid():
-
-                    errors[f"item_{index}"] = (
-                        serializer.errors
-                    )
-
-                    continue
-
-                # --------------------------------------------
-                # Save
-                # --------------------------------------------
-
-                updated_instance = serializer.save()
-
-                updated_domains.append(
-                    updated_instance
-                )
-
-            # ------------------------------------------------
-            # Any error => rollback everything
-            # ------------------------------------------------
-
-            if errors:
-
-                log_critical_event(
-                    action="EDIT_DOMAIN",
-                    status_type="failed",
-                    request=request,
-                    user_id=request.user.id,
-                    error_code=10,
-                    extra={
-                        "errors": errors,
-                    },
-                )
-
-                transaction.set_rollback(
-                    True
-                )
-
-                return Response(
-                    {
-                        "error_code": 10,
-
-                        "message": {
+                        errors[f"item_{index}"] = {
                             "fa": (
-                                "برخی از اطلاعات ارسالی "
-                                "برای ویرایش نامعتبر هستند."
+                                "ارسال فیلد domain_name "
+                                "برای ویرایش الزامی است."
                             ),
                             "en": (
-                                "Some of the submitted "
-                                "data for editing is invalid."
+                                "The domain_name field "
+                                "is required for editing."
                             ),
+                        }
+
+                        continue
+
+                    # --------------------------------------------
+                    # Find domain
+                    # --------------------------------------------
+
+                    try:
+
+                        domain_instance = Domain.objects.get(
+                            domain_name=domain_name,
+                            deleted_at__isnull=True,
+                        )
+
+                    except Domain.DoesNotExist:
+
+                        errors[f"item_{index}"] = {
+                            "fa": (
+                                f"دامنه با نام «{domain_name}» "
+                                "یافت نشد."
+                            ),
+                            "en": (
+                                f"Domain with name "
+                                f"«{domain_name}» was not found."
+                            ),
+                        }
+
+                        continue
+
+                    # --------------------------------------------
+                    # Validate
+                    # --------------------------------------------
+
+                    serializer = DomainImportOrEditSerializer(
+                        domain_instance,
+                        data=item,
+                        partial=True,
+                    )
+
+                    if not serializer.is_valid():
+
+                        errors[f"item_{index}"] = (
+                            serializer.errors
+                        )
+
+                        continue
+
+                    # --------------------------------------------
+                    # Save
+                    # --------------------------------------------
+
+                    updated_instance = serializer.save()
+
+                    updated_domains.append(
+                        updated_instance
+                    )
+
+                # ------------------------------------------------
+                # Any error => rollback everything
+                # ------------------------------------------------
+
+                if errors:
+
+                    log_critical_event(
+                        action="EDIT_DOMAIN",
+                        status_type="failed",
+                        request=request,
+                        user_id=request.user.id,
+                        error_code=10,
+                        extra={
+                            "errors": errors,
+                        },
+                    )
+
+                    transaction.set_rollback(
+                        True
+                    )
+
+                    return Response(
+                        {
+                            "error_code": 10,
+
+                            "message": {
+                                "fa": (
+                                    "برخی از اطلاعات ارسالی "
+                                    "برای ویرایش نامعتبر هستند."
+                                ),
+                                "en": (
+                                    "Some of the submitted "
+                                    "data for editing is invalid."
+                                ),
+                            },
+
+                            "detail": errors,
                         },
 
-                        "detail": errors,
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # ----------------------------------------------------
+            # Serialize updated domains
+            # ----------------------------------------------------
+
+            updated_data = DomainImportOrEditSerializer(
+                updated_domains,
+                many=True,
+            ).data
+
+            # ----------------------------------------------------
+            # Log success
+            # ----------------------------------------------------
+
+            log_critical_event(
+                action="EDIT_DOMAIN",
+                status_type="success",
+                request=request,
+                user_id=request.user.id,
+                extra={
+                    "domain_count": len(
+                        updated_domains
+                    ),
+
+                    "updated_domains": [
+                        domain.domain_name
+                        for domain in updated_domains
+                    ],
+                },
+            )
+
+            # ----------------------------------------------------
+            # Unified response
+            # ----------------------------------------------------
+
+            return Response(
+                {
+                    "message": {
+                        "fa": (
+                            f"مشخصات تعداد "
+                            f"{len(updated_domains)} دامنه "
+                            "با موفقیت بروزرسانی شد."
+                        ),
+                        "en": (
+                            f"Details of "
+                            f"{len(updated_domains)} domain(s) "
+                            "were updated successfully."
+                        ),
                     },
 
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        # ----------------------------------------------------
-        # Serialize updated domains
-        # ----------------------------------------------------
-
-        updated_data = DomainImportOrEditSerializer(
-            updated_domains,
-            many=True,
-        ).data
-
-        # ----------------------------------------------------
-        # Log success
-        # ----------------------------------------------------
-
-        log_critical_event(
-            action="EDIT_DOMAIN",
-            status_type="success",
-            request=request,
-            user_id=request.user.id,
-            extra={
-                "domain_count": len(
-                    updated_domains
-                ),
-
-                "updated_domains": [
-                    domain.domain_name
-                    for domain in updated_domains
-                ],
-            },
-        )
-
-        # ----------------------------------------------------
-        # Unified response
-        # ----------------------------------------------------
-
-        return Response(
-            {
-                "message": {
-                    "fa": (
-                        f"مشخصات تعداد "
-                        f"{len(updated_domains)} دامنه "
-                        "با موفقیت بروزرسانی شد."
+                    "updated_count": len(
+                        updated_domains
                     ),
-                    "en": (
-                        f"Details of "
-                        f"{len(updated_domains)} domain(s) "
-                        "were updated successfully."
-                    ),
+
+                    "updated_domains": updated_data,
                 },
 
-                "updated_count": len(
-                    updated_domains
-                ),
+                status=status.HTTP_200_OK,
+            )
 
-                "updated_domains": updated_data,
-            },
-
-            status=status.HTTP_200_OK,
-        )
+        except Exception:
+            log_critical_event(
+                action="EDIT_DOMAIN",
+                status_type="error",
+                request=request,
+                user_id=request.user.id,
+                error_code="EDIT_DOMAIN_FAILED",
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     # ========================================================
     # DELETE
@@ -859,185 +1023,198 @@ class ImportOrEditDomainView(APIView):
         },
     )
     def delete(self, request):
+        try:
+            data = request.data
 
-        data = request.data
+            is_many = isinstance(
+                data,
+                list,
+            )
 
-        is_many = isinstance(
-            data,
-            list,
-        )
+            items = data if is_many else [data]
 
-        items = data if is_many else [data]
+            deleted_domains = []
 
-        deleted_domains = []
+            errors = {}
 
-        errors = {}
+            # ----------------------------------------------------
+            # Transaction
+            # ----------------------------------------------------
 
-        # ----------------------------------------------------
-        # Transaction
-        # ----------------------------------------------------
+            with transaction.atomic():
 
-        with transaction.atomic():
+                for index, item in enumerate(items):
 
-            for index, item in enumerate(items):
+                    # --------------------------------------------
+                    # Validate using DomainDeleteSerializer
+                    # --------------------------------------------
 
-                # --------------------------------------------
-                # Validate using DomainDeleteSerializer
-                # --------------------------------------------
-
-                serializer = DomainDeleteSerializer(
-                    data=item
-                )
-
-                if not serializer.is_valid():
-
-                    errors[f"item_{index}"] = (
-                        serializer.errors
+                    serializer = DomainDeleteSerializer(
+                        data=item
                     )
 
-                    continue
+                    if not serializer.is_valid():
 
-                domain_name = (
-                    serializer.validated_data[
-                        "domain_name"
-                    ]
-                )
+                        errors[f"item_{index}"] = (
+                            serializer.errors
+                        )
 
-                # --------------------------------------------
-                # Find active domain
-                # --------------------------------------------
+                        continue
 
-                try:
-
-                    domain_instance = Domain.objects.get(
-                        domain_name=domain_name,
-                        deleted_at__isnull=True,
+                    domain_name = (
+                        serializer.validated_data[
+                            "domain_name"
+                        ]
                     )
 
-                except Domain.DoesNotExist:
+                    # --------------------------------------------
+                    # Find active domain
+                    # --------------------------------------------
 
-                    errors[f"item_{index}"] = {
-                        "fa": (
-                            f"دامنه با نام «{domain_name}» "
-                            "یافت نشد."
-                        ),
-                        "en": (
-                            f"Domain with name "
-                            f"«{domain_name}» was not found."
-                        ),
-                    }
+                    try:
 
-                    continue
+                        domain_instance = Domain.objects.get(
+                            domain_name=domain_name,
+                            deleted_at__isnull=True,
+                        )
 
-                # --------------------------------------------
-                # Soft delete
-                # --------------------------------------------
+                    except Domain.DoesNotExist:
 
-                domain_instance.deleted_at = timezone.now()
-
-                domain_instance.save(
-                    update_fields=[
-                        "deleted_at"
-                    ]
-                )
-
-                deleted_domains.append(
-                    domain_instance
-                )
-
-            # ------------------------------------------------
-            # Any error => rollback everything
-            # ------------------------------------------------
-
-            if errors:
-
-                log_critical_event(
-                    action="DELETE_DOMAIN",
-                    status_type="failed",
-                    request=request,
-                    user_id=request.user.id,
-                    error_code=10,
-                    extra={
-                        "deleted_domains": [
-                            domain.domain_name
-                            for domain in deleted_domains
-                        ],
-                        "detail": errors,
-                    },
-                )
-
-                transaction.set_rollback(
-                    True
-                )
-
-                return Response(
-                    {
-                        "error_code": 10,
-
-                        "message": {
+                        errors[f"item_{index}"] = {
                             "fa": (
-                                "برخی از دامنه‌ها "
-                                "قابل حذف نیستند."
+                                f"دامنه با نام «{domain_name}» "
+                                "یافت نشد."
                             ),
                             "en": (
-                                "Some domains "
-                                "could not be deleted."
+                                f"Domain with name "
+                                f"«{domain_name}» was not found."
                             ),
+                        }
+
+                        continue
+
+                    # --------------------------------------------
+                    # Soft delete
+                    # --------------------------------------------
+
+                    domain_instance.deleted_at = timezone.now()
+
+                    domain_instance.save(
+                        update_fields=[
+                            "deleted_at"
+                        ]
+                    )
+
+                    deleted_domains.append(
+                        domain_instance
+                    )
+
+                # ------------------------------------------------
+                # Any error => rollback everything
+                # ------------------------------------------------
+
+                if errors:
+
+                    log_critical_event(
+                        action="DELETE_DOMAIN",
+                        status_type="failed",
+                        request=request,
+                        user_id=request.user.id,
+                        error_code=10,
+                        extra={
+                            "deleted_domains": [
+                                domain.domain_name
+                                for domain in deleted_domains
+                            ],
+                            "detail": errors,
+                        },
+                    )
+
+                    transaction.set_rollback(
+                        True
+                    )
+
+                    return Response(
+                        {
+                            "error_code": 10,
+
+                            "message": {
+                                "fa": (
+                                    "برخی از دامنه‌ها "
+                                    "قابل حذف نیستند."
+                                ),
+                                "en": (
+                                    "Some domains "
+                                    "could not be deleted."
+                                ),
+                            },
+
+                            "detail": errors,
                         },
 
-                        "detail": errors,
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # ----------------------------------------------------
+            # Log success
+            # ----------------------------------------------------
+
+            log_critical_event(
+                action="DELETE_DOMAIN",
+                status_type="success",
+                request=request,
+                user_id=request.user.id,
+                extra={
+                    "deleted_count": len(
+                        deleted_domains
+                    ),
+
+                    "deleted_domains": [
+                        domain.domain_name
+                        for domain in deleted_domains
+                    ],
+                },
+            )
+
+            # ----------------------------------------------------
+            # Unified response
+            # ----------------------------------------------------
+
+            return Response(
+                {
+                    "message": {
+                        "fa": (
+                            f"{len(deleted_domains)} دامنه "
+                            "با موفقیت حذف شدند."
+                        ),
+                        "en": (
+                            f"{len(deleted_domains)} domain(s) "
+                            "were deleted successfully."
+                        ),
                     },
 
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        # ----------------------------------------------------
-        # Log success
-        # ----------------------------------------------------
-
-        log_critical_event(
-            action="DELETE_DOMAIN",
-            status_type="success",
-            request=request,
-            user_id=request.user.id,
-            extra={
-                "deleted_count": len(
-                    deleted_domains
-                ),
-
-                "deleted_domains": [
-                    domain.domain_name
-                    for domain in deleted_domains
-                ],
-            },
-        )
-
-        # ----------------------------------------------------
-        # Unified response
-        # ----------------------------------------------------
-
-        return Response(
-            {
-                "message": {
-                    "fa": (
-                        f"{len(deleted_domains)} دامنه "
-                        "با موفقیت حذف شدند."
+                    "deleted_count": len(
+                        deleted_domains
                     ),
-                    "en": (
-                        f"{len(deleted_domains)} domain(s) "
-                        "were deleted successfully."
-                    ),
+
+                    "deleted_domains": [
+                        domain.domain_name
+                        for domain in deleted_domains
+                    ],
                 },
 
-                "deleted_count": len(
-                    deleted_domains
-                ),
+                status=status.HTTP_200_OK,
+            )
 
-                "deleted_domains": [
-                    domain.domain_name
-                    for domain in deleted_domains
-                ],
-            },
-
-            status=status.HTTP_200_OK,
-        )
+        except Exception:
+            log_critical_event(
+                action="DELETE_DOMAIN",
+                status_type="error",
+                request=request,
+                user_id=request.user.id,
+                error_code="DELETE_DOMAIN_FAILED",
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

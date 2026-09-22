@@ -33,52 +33,65 @@ class TagCreateView(APIView):
         }
     )
     def post(self, request):
-        serializer = TagRegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            if 'title' in serializer.errors:
-                for error in serializer.errors['title']:
-                    if getattr(error, 'code', None) =='tag_exists':
-                        log_critical_event(
-                            action="CREATE_TAG",
-                            status_type='failed',
-                            request=request,
-                            user_id=request.user.id,
-                            error_code=11,
-                        )
-                        return Response({
-                            "error_code": 11,
-                            "message": {
-                                "fa": "این تگ قبلاً ثبت شده است.",
-                                "en": "This tag already exists."
-                            },
-                            "detail": serializer.errors
-                        }, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            serializer = TagRegisterSerializer(data=request.data)
+            if not serializer.is_valid():
+                if 'title' in serializer.errors:
+                    for error in serializer.errors['title']:
+                        if getattr(error, 'code', None) =='tag_exists':
+                            log_critical_event(
+                                action="CREATE_TAG",
+                                status_type='failed',
+                                request=request,
+                                user_id=request.user.id,
+                                error_code=11,
+                            )
+                            return Response({
+                                "error_code": 11,
+                                "message": {
+                                    "fa": "این تگ قبلاً ثبت شده است.",
+                                    "en": "This tag already exists."
+                                },
+                                "detail": serializer.errors
+                            }, status=status.HTTP_400_BAD_REQUEST)
 
+                log_critical_event(
+                    action="CREATE_TAG",
+                    status_type='failed',
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=10,
+                )
+                return Response({
+                    "error_code": 10,
+                    "message": {
+                        "fa": "اطلاعات ارسالی برای ایجاد تگ معتبر نیست.",
+                        "en": "The submitted data for creating a tag is not valid."
+                    },
+                    "detail": serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            tag = serializer.save(created_by=request.user)
             log_critical_event(
                 action="CREATE_TAG",
-                status_type='failed',
+                status_type='success',
                 request=request,
                 user_id=request.user.id,
-                error_code=10,
-            )
-            return Response({
-                "error_code": 10,
-                "message": {
-                    "fa": "اطلاعات ارسالی برای ایجاد تگ معتبر نیست.",
-                    "en": "The submitted data for creating a tag is not valid."
+                extra={
+                    "tag_id": tag.id,
+                    "tag_title": tag.title,
                 },
-                "detail": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        tag = serializer.save(created_by=request.user)
-        log_critical_event(
-            action="CREATE_TAG",
-            status_type='success',
-            request=request,
-            user_id=request.user.id,
-            extra={
-                "tag_id": tag.id,
-                "tag_title": tag.title,
-            },
-        )
-        return Response(TagRegisterSerializer(tag).data, status=status.HTTP_201_CREATED)
+            )
+            return Response(TagRegisterSerializer(tag).data, status=status.HTTP_201_CREATED)
+        except Exception:
+            log_critical_event(
+                action="CREATE_TAG",
+                status_type='error',
+                request=request,
+                user_id=request.user.id,
+                error_code='CREATE_TAG_FAILED',
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

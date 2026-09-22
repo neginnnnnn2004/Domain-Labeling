@@ -19,7 +19,7 @@ class TagUpdateView(APIView):
 
     def get_object(self, pk):
         try:
-            return Tag.objects.get(pk=pk)
+            return Tag.objects.filter(pk=pk, deleted_at__isnull=True).first()
         except Tag.DoesNotExist:
             return None
 
@@ -43,78 +43,94 @@ class TagUpdateView(APIView):
         }
     )
     def patch(self, request, pk):
-        tag = self.get_object(pk)
-        if not tag:
+        try:
+            tag = self.get_object(pk)
+            if not tag:
 
+                log_critical_event(
+                    action="EDIT_TAG",
+                    status_type="failed",
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=55,
+                    extra={
+                        "tag_id": pk,
+                    }
+                )
+                return Response({
+                "error_code": 55,
+                    "message": {
+                        "fa": f"تگی با شناسه {pk} یافت نشد.",
+                        "en": f"Tag with ID {pk} was not found."
+                    },
+                }, status = status.HTTP_404_NOT_FOUND)
+
+            serializer = TagRegisterSerializer(tag, data=request.data,partial=True)
+            if not serializer.is_valid():
+                error_code = 10
+
+                if "title" in serializer.errors:
+                    for error in serializer.errors["title"]:
+                        if getattr(error, "code", None) == "tag_exists":
+                            error_code = 11
+                            break
+
+                log_critical_event(
+                    action="EDIT_TAG",
+                    status_type="failed",
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=error_code,
+                    extra={
+                        "tag_id": pk,
+                        "validation_errors": serializer.errors,
+                    }
+                )
+
+                if error_code == 11:
+                    message = {
+                        "fa": "این تگ قبلاً ثبت شده است.",
+                        "en": "This tag already exists."
+                    }
+                else:
+                    message = {
+                        "fa": "اطلاعات ارسالی معتبر نیست.",
+                        "en": "The submitted data is not valid."
+                    }
+
+                return Response({
+                    "error_code": error_code,
+                    "message": message,
+                    "detail": serializer.errors
+                },status=status.HTTP_400_BAD_REQUEST)
+
+            updated_tag = serializer.save()
             log_critical_event(
                 action="EDIT_TAG",
-                status_type="failed",
+                status_type="success",
                 request=request,
                 user_id=request.user.id,
-                error_code=55,
+                extra={
+                    "tag_id": updated_tag.id,
+                    "tag_title": updated_tag.title,
+                }
+            )
+            return Response(TagRegisterSerializer(updated_tag).data, status=status.HTTP_200_OK)
+        except Exception:
+            log_critical_event(
+                action="EDIT_TAG",
+                status_type="error",
+                request=request,
+                user_id=request.user.id,
+                error_code="EDIT_TAG_FAILED",
                 extra={
                     "tag_id": pk,
                 }
             )
-            return Response({
-            "error_code": 55,
-                "message": {
-                    "fa": f"تگی با شناسه {pk} یافت نشد.",
-                    "en": f"Tag with ID {pk} was not found."
-                },
-            }, status = status.HTTP_404_NOT_FOUND)
-
-        serializer = TagRegisterSerializer(tag, data=request.data,partial=True)
-        if not serializer.is_valid():
-            error_code = 10
-
-            if "title" in serializer.errors:
-                for error in serializer.errors["title"]:
-                    if getattr(error, "code", None) == "tag_exists":
-                        error_code = 11
-                        break
-
-            log_critical_event(
-                action="EDIT_TAG",
-                status_type="failed",
-                request=request,
-                user_id=request.user.id,
-                error_code=error_code,
-                extra={
-                    "tag_id": pk,
-                    "validation_errors": serializer.errors,
-                }
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-            if error_code == 11:
-                message = {
-                    "fa": "این تگ قبلاً ثبت شده است.",
-                    "en": "This tag already exists."
-                }
-            else:
-                message = {
-                    "fa": "اطلاعات ارسالی معتبر نیست.",
-                    "en": "The submitted data is not valid."
-                }
-
-            return Response({
-                "error_code": error_code,
-                "message": message,
-                "detail": serializer.errors
-            },status=status.HTTP_400_BAD_REQUEST)
-
-        updated_tag = serializer.save()
-        log_critical_event(
-            action="EDIT_TAG",
-            status_type="success",
-            request=request,
-            user_id=request.user.id,
-            extra={
-                "tag_id": updated_tag.id,
-                "tag_title": updated_tag.title,
-            }
-        )
-        return Response(TagRegisterSerializer(updated_tag).data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_description="""
@@ -131,38 +147,54 @@ class TagUpdateView(APIView):
         }
     )
     def delete(self, request,pk):
-        tag = self.get_object(pk)
-        if not tag:
+        try:
+            tag = self.get_object(pk)
+            if not tag:
+                log_critical_event(
+                    action="DELETE_TAG",
+                    status_type="failed",
+                    request=request,
+                    user_id=request.user.id,
+                    error_code=55,
+                    extra={
+                        'tag_id': pk,
+                    }
+                )
+                return Response({
+                    "error_code": 55,
+                    "message": {
+                        "fa": f"تگی با شناسه {pk} یافت نشد.",
+                        "en": f"Tag with ID {pk} was not found."
+                    },
+                },status=status.HTTP_404_NOT_FOUND)
+
+            tag.deleted_at = timezone.now()
+            tag.is_active = False
+            tag.save(update_fields=["is_active", 'deleted_at'])
+
             log_critical_event(
                 action="DELETE_TAG",
-                status_type="failed",
+                status_type="success",
                 request=request,
                 user_id=request.user.id,
-                error_code=55,
                 extra={
-                    'tag_id': pk,
+                    "tag_id": tag.id,
+                    "tag_title": tag.title,
                 }
             )
-            return Response({
-                "error_code": 55,
-                "message": {
-                    "fa": f"تگی با شناسه {pk} یافت نشد.",
-                    "en": f"Tag with ID {pk} was not found."
-                },
-            },status=status.HTTP_404_NOT_FOUND)
-
-        tag.deleted_at = timezone.now()
-        tag.is_active = False
-        tag.save(update_fields=["is_active", 'deleted_at'])
-
-        log_critical_event(
-            action="DELETE_TAG",
-            status_type="success",
-            request=request,
-            user_id=request.user.id,
-            extra={
-                "tag_id": tag.id,
-                "tag_title": tag.title,
-            }
-        )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception:
+            log_critical_event(
+                action="DELETE_TAG",
+                status_type="error",
+                request=request,
+                user_id=request.user.id,
+                error_code="DELETE_TAG_FAILED",
+                extra={
+                    "tag_id": pk,
+                }
+            )
+            return Response(
+                {"detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

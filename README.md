@@ -2,42 +2,29 @@
 
 `DomainAuth` is a centralized, production-ready **Identity & Access Management (IAM)** web service built with **Django** and **Django REST Framework (DRF)**.
 
-Designed with a highly clean, decoupled architecture, this service manages custom user authentication, granular group permissions, and enterprise domain tracking with dynamic tagging. It features a completely stateless, time-sensitive password reset mechanism that ensures top-tier security without database overhead.
+The service provides custom authentication, JWT-based access, role-based authorization, user and group management, domain management, dynamic tag assignment, backup-code password recovery, and security audit logging.
 
 ---
 
 ## 🌟 Key Features
 
-* **Custom User Architecture:** Built using a customized Django User Model (`User`), allowing the system to support additional user attributes such as roles, account status, phone number, verification status, and login tracking.
+- **Custom User Architecture:** Customized Django `User` model supporting roles, account status, phone number, verification status, login tracking, and soft deletion.
+- **JWT Authentication:** Stateless authentication using JSON Web Tokens.
+- **Granular Access Control:** Dedicated permission classes for users, roles, groups, domains, and tags.
+- **Secure Password Reset with Backup Codes:** One-time backup recovery codes are securely hashed and invalidated after use.
+- **Automatic Backup Code Rotation:** A new backup code is generated after a successful password reset.
+- **User Enumeration Protection:** Password-reset and login workflows use generic responses where appropriate to avoid revealing account existence.
+- **Domain & Tag Management:** Domain import, update, deletion, tag creation, tag management, and bulk domain-tag synchronization.
+- **Group Management:** Group creation, user-group assignment, primary-group support, and domain association.
+- **User Management:** User listing, pending-user management, role assignment, status management, and soft deletion.
+- **Security Audit Logging:** Security-sensitive events are recorded through structured logging without storing passwords, tokens, or backup codes.
+- **Automated Testing:** Module-based tests covering authentication, password reset, user management, group management, and domain/tag management.
 
-* **JWT Authentication:** Implements stateless authentication using JSON Web Tokens with short-lived access tokens and longer-lived refresh tokens.
-
-* **Granular Access Control:** Provides role-based access control and dedicated permission classes for managing users, roles, groups, domains, and tags.
-
-* **Secure Password Reset with Backup Codes:** Allows users to reset their password using a one-time backup code. Backup codes are securely hashed before being stored in the database and are marked as used after successful verification.
-
-* **Automatic Backup Code Rotation:** After a backup code is successfully used for password recovery, it is invalidated and a new backup code is generated.
-
-* **User Enumeration Protection:** Password reset failures use a generic error response for invalid account information and invalid backup codes, reducing the risk of revealing whether a username exists.
-
-* **Domain & Tag Management:** Provides APIs for managing domains and dynamically assigning tags to domains, supporting classification, filtering, and organizational domain management.
-
-* **Group Management:** Supports group creation, user-group assignment, primary group management, and domain association.
-
-* **User Management:** Provides administrative functionality for managing users, roles, account status, and pending users.
-
-* **Security Audit Logging:** Records security-sensitive events such as password reset attempts using structured logs while excluding sensitive information such as passwords, tokens, and backup codes.
-
-* **Automated Testing:** Includes module-based unit and integration tests covering authentication, password reset, user management, group management, and domain/tag management.
 ---
 
-## 📁 Project Architecture & Structure
+# 📁 Project Architecture & Structure
 
 The project follows the **Separation of Concerns (SoC)** principle by organizing authentication, user management, group management, and domain/tag management into separate Django applications.
-
-Each application is responsible for its own domain-specific views, serializers, permissions, utilities, and test suites, while the `identity` application provides the core data models and shared identity-related functionality.
-
-This modular architecture improves **maintainability, scalability, testability, and separation of responsibilities**.
 
 ```text
 📁 iam2/                                      # Project root
@@ -48,14 +35,14 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   ├── 📁 tests/                             # Legacy/core test suites
 │   ├── 📁 views/                             # Legacy/core API views
 │   ├── __init__.py
-│   ├── admin.py                              # Django admin configuration
-│   ├── apps.py                               # Django application configuration
-│   ├── formatters.py                         # Response/log formatting utilities
+│   ├── admin.py
+│   ├── apps.py
+│   ├── formatters.py
 │   ├── models.py                             # Core data models
-│   ├── permissions.py                        # Custom permission classes
-│   ├── services.py                           # Service-layer and security audit helpers
-│   ├── urls.py                               # Identity application routing
-│   └── utils.py                              # Backup code generation and verification
+│   ├── permissions.py
+│   ├── services.py                            # Service/security audit helpers
+│   ├── urls.py
+│   └── utils.py
 │
 ├── 📁 accounts/                              # Authentication and account management
 │   ├── 📁 serializers/
@@ -65,7 +52,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── profile_update.py
 │   │   ├── register.py
 │   │   └── reset_pass.py
-│   │
 │   ├── 📁 tests/
 │   │   ├── __init__.py
 │   │   ├── test_get_my_role.py
@@ -73,7 +59,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── test_profile_update.py
 │   │   ├── test_register.py
 │   │   └── test_reset_pass.py
-│   │
 │   ├── 📁 views/
 │   │   ├── __init__.py
 │   │   ├── get_my_role.py
@@ -81,7 +66,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── profile_update.py
 │   │   ├── register.py
 │   │   └── reset_pass.py
-│   │
 │   ├── __init__.py
 │   ├── admin.py
 │   ├── apps.py
@@ -90,7 +74,7 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   ├── urls.py
 │   └── utils.py
 │
-├── 📁 user_management/                      # User and role management
+├── 📁 user_management/                       # User and role management
 │   ├── 📁 serializers/
 │   │   ├── __init__.py
 │   │   ├── assign_role.py
@@ -98,7 +82,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── list_users.py
 │   │   ├── manage_status.py
 │   │   └── pending_users.py
-│   │
 │   ├── 📁 tests/
 │   │   ├── __init__.py
 │   │   ├── test_assign_role.py
@@ -106,7 +89,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── test_list_users.py
 │   │   ├── test_manage_status.py
 │   │   └── test_pending_users.py
-│   │
 │   ├── 📁 views/
 │   │   ├── __init__.py
 │   │   ├── assign_role.py
@@ -114,7 +96,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── list_users.py
 │   │   ├── manage_status.py
 │   │   └── pending_users.py
-│   │
 │   ├── __init__.py
 │   ├── admin.py
 │   ├── apps.py
@@ -123,40 +104,26 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   ├── urls.py
 │   └── utils.py
 │
-├── 📁 group_management/                     # Group management
+├── 📁 group_management/                      # Group management API
 │   ├── 📁 serializers/
-│   │   ├── __init__.py
-│   │   ├── group_assign_users.py
 │   │   ├── group_detail.py
+│   │   ├── group_domain_assign.py
 │   │   ├── group_domains.py
 │   │   ├── group_list.py
-│   │   └── group_register.py
-│   │
-│   ├── 📁 tests/
-│   │   ├── __init__.py
-│   │   ├── test_group_assign_users.py
-│   │   ├── test_group_detail.py
-│   │   ├── test_group_domains.py
-│   │   ├── test_group_list.py
-│   │   └── test_group_register.py
-│   │
+│   │   ├── group_members.py
+│   │   ├── group_register.py
+│   │   └── group_user_bulk_assign.py
 │   ├── 📁 views/
-│   │   ├── __init__.py
-│   │   ├── group_assign_users.py
-│   │   ├── group_detail.py
-│   │   ├── group_domains.py
 │   │   ├── group_list.py
-│   │   └── group_register.py
-│   │
-│   ├── __init__.py
-│   ├── admin.py
-│   ├── apps.py
-│   ├── models.py
-│   ├── permissions.py
-│   ├── urls.py
-│   └── utils.py
+│   │   ├── group_register.py
+│   │   ├── group_detail.py
+│   │   ├── group_user_bulk_assign.py
+│   │   ├── group_domains.py
+│   │   ├── group_members.py
+│   │   └── group_domain_assign.py
+│   └── urls.py
 │
-├── 📁 domain_tag_management/                # Domain and tag management
+├── 📁 domain_tag_management/                 # Domain and tag management
 │   ├── 📁 serializers/
 │   │   ├── __init__.py
 │   │   ├── assign_tag_to_domain.py
@@ -165,7 +132,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── tag_create.py
 │   │   ├── tag_edit_or_delete.py
 │   │   └── tag_list.py
-│   │
 │   ├── 📁 tests/
 │   │   ├── __init__.py
 │   │   ├── test_assign_tag_to_domain.py
@@ -174,7 +140,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── test_tag_create.py
 │   │   ├── test_tag_edit_or_delete.py
 │   │   └── test_tag_list.py
-│   │
 │   ├── 📁 views/
 │   │   ├── __init__.py
 │   │   ├── assign_tag_to_domain.py
@@ -183,7 +148,6 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   │   ├── tag_create.py
 │   │   ├── tag_edit_or_delete.py
 │   │   └── tag_list.py
-│   │
 │   ├── __init__.py
 │   ├── admin.py
 │   ├── apps.py
@@ -192,151 +156,196 @@ This modular architecture improves **maintainability, scalability, testability, 
 │   ├── urls.py
 │   └── utils.py
 │
-├── 📁 middleware/                           # Custom Django middleware
+├── 📁 middleware/
 │   ├── __init__.py
-│   └── logging_middleware.py                # Request/response logging middleware
+│   └── logging_middleware.py
 │
-├── 📁 config/                               # Core Django project configuration
+├── 📁 config/
 │   ├── __init__.py
 │   ├── asgi.py
-│   ├── settings.py                           # Project settings
-│   ├── urls.py                               # Global URL routing
+│   ├── settings.py
+│   ├── urls.py
 │   └── wsgi.py
 │
-├── .env.example                              # Environment variable template
-├── .gitignore                                # Git ignore rules
-├── .gitlab-ci.yml                            # GitLab CI/CD configuration
-├── Dockerfile                                # Docker image configuration
-├── LICENSE                                   # Project license
-├── README.md                                 # Project documentation
-├── requirements.txt                          # Python dependencies
-├── manage.py                                 # Django management utility
-├── logger.py                                 # Project-level logging configuration
-├── import_domains.py                         # Domain data import script
-├── delete_domains.py                         # Domain deletion/cleanup script
-│
-#not sure about xlsx file in tree... i should check it
-├── 📄 Fa_domain (1).xlsx                     # Domain data source
-└── 📄 لیست سایت های فارسی.xlsx                # Persian website/domain list```
+├── .env.example
+├── .gitignore
+├── .gitlab-ci.yml
+├── Dockerfile
+├── LICENSE
+├── README.md
+├── requirements.txt
+├── manage.py
+├── logger.py
+├── import_domains.py
+└── delete_domains.py
+```
 
-### 🔐 Ignored Files
+> **Note:** The two `.xlsx` files previously listed in the project tree are intentionally not included in the canonical tree above because their current repository status has not yet been confirmed.
 
-The following files and directories are intentionally excluded from version control
-for security and environment-specific reasons:
+---
 
-- `.env` — Contains local environment variables and sensitive configuration.
-- `logs/` — Contains runtime application and security logs.
-- `.venv/` — Local Python virtual environment.
+# 🔐 Ignored Files
 
-## 🚀 Installation & Setup
+The following files/directories are intentionally excluded from version control:
 
-Follow these steps to set up and run the project locally.
+- `.env` — local environment variables and sensitive configuration.
+- `logs/` — runtime and security logs.
+- `.venv/` — local Python virtual environment.
 
-### 1. Clone the Repository
+---
+
+# 🚀 Installation & Setup
+
+## 1. Clone the Repository
 
 ```bash
 git clone https://gitlab.lioradco.ir/domain-labeling/backend.git
 cd backend
 ```
 
-### 2. Configure Environment Variables
+## 2. Configure Environment Variables
 
-Create your local environment file from the provided template:
+Create the local environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-> **Note:** Update the values in `.env` according to your local database and environment configuration. The `.env` file is not included in version control because it may contain sensitive information.
+> **Windows:** If `cp` is unavailable, copy `.env.example` manually and rename it to `.env`.
 
-### 3. Configure the Virtual Environment
+Update `.env` according to the local database and environment configuration.
 
-Create a Python virtual environment:
+The `.env` file must not be committed to Git.
+
+## 3. Create the Virtual Environment
 
 ```bash
 python -m venv .venv
 ```
 
-Activate the virtual environment:
-
-**Windows:**
+### Windows
 
 ```bash
 .venv\Scripts\activate
 ```
 
-**macOS/Linux:**
+### macOS/Linux
 
 ```bash
 source .venv/bin/activate
 ```
 
-### 4. Install Dependencies
-
-Install the required Python packages:
+## 4. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 5. Apply Database Migrations
+The project currently includes:
 
-Run the Django database migrations:
+```text
+drf-spectacular==0.30.0
+```
+
+for OpenAPI schema/documentation.
+
+## 5. Apply Database Migrations
 
 ```bash
 python manage.py migrate
 ```
 
-### 6. Run the Test Suite
-
-Run all project tests to verify the application:
+## 6. Run Tests
 
 ```bash
 python manage.py test
 ```
 
-### 7. Run the Development Server
-
-Start the Django development server:
+## 7. Run the Development Server
 
 ```bash
 python manage.py runserver
 ```
 
-The application will then be available at:
+Application:
 
 ```text
 http://127.0.0.1:8000/
 ```
 
-#it should be edit
-# 🗺️ API Endpoints Reference — Authentication & Profile Management
+---
 
-Base path: `/accounts/`
+# 🔑 Authentication & Authorization
+
+Most protected endpoints require JWT authentication.
+
+The main application roles are:
+
+- `limited`
+- `regular`
+- `admin`
+- `super_admin`
+
+## Permission Classes
+
+### `IsAdminRole`
+
+Allows active users whose role is:
+
+```text
+admin
+super_admin
+```
+
+### `IsSuperAdmin`
+
+Allows active users whose role is:
+
+```text
+super_admin
+```
+
+### `IsAllowedUser`
+
+Allows active users whose role is:
+
+```text
+regular
+admin
+super_admin
+```
+
+A `limited` user does not pass `IsAllowedUser`.
+
+> Permission checks are based on the user's active status and assigned role. The domain/tag assignment logic does not use a separate `is_superuser` bypass.
 
 ---
 
-## POST /accounts/register/
+# 🗺️ API Endpoints Reference — Authentication & Profile Management
 
-Registers a new user account and issues one-time backup recovery codes for
-account recovery. Backup codes are shown only once at registration time and
-must be stored securely by the client.
+**Base path:** `/accounts/`
+
+---
+
+## POST `/accounts/register/`
+
+Registers a new user account and issues one-time backup recovery codes.
 
 **Authentication:** Not required
 
-**Request Body**
+### Request Body
 
-| Field              | Type   | Required | Notes                                                              |
-|--------------------|--------|----------|-----------------------------------------------------------------------|
-| `username`         | string | Yes      | 5–20 chars; letters, digits, `_`, `-` only. Normalized to lowercase.   |
-| `password`         | string | Yes      | Min 8 chars; validated against Django's password strength rules.      |
-| `confirm_password` | string | Yes      | Must match `password`.                                                |
-| `email`            | string | Yes      | Must be unique. Normalized to lowercase.                              |
-| `phone`            | string | Yes      | Iranian mobile format: `09xxxxxxxxx`. Must be unique.                  |
-| `first_name`       | string | No       | —                                                                      |
-| `last_name`        | string | No       | —                                                                      |
+| Field | Type | Required | Notes |
+|---|---|---:|---|
+| `username` | string | Yes | 5–20 chars; letters, digits, `_`, `-`; normalized to lowercase |
+| `password` | string | Yes | Minimum 8 chars; validated by password rules |
+| `confirm_password` | string | Yes | Must match `password` |
+| `email` | string | Yes | Unique; normalized to lowercase |
+| `phone` | string | Yes | Iranian mobile format: `09xxxxxxxxx`; unique |
+| `first_name` | string | No | — |
+| `last_name` | string | No | — |
 
-**Response — 201 Created**
+### Response — 201 Created
 
 ```json
 {
@@ -344,42 +353,46 @@ must be stored securely by the client.
     "fa": "...",
     "en": "Registration successful. Please store your backup codes in a safe place."
   },
-  "user": { "username": "...", "email": "...", "phone": "...", "first_name": "...", "last_name": "..." },
+  "user": {
+    "username": "...",
+    "email": "...",
+    "phone": "...",
+    "first_name": "...",
+    "last_name": "..."
+  },
   "backup_codes": ["XXXXXXXX", "..."]
 }
 ```
 
-**Response — 400 Bad Request**
+### Response — 400 Bad Request
 
-| `error_code` | Meaning                                                     |
-|---------------|-----------------------------------------------------------------|
-| 10            | Invalid input data (e.g. username format)                        |
-| 11            | Username already exists                                          |
-| 12            | One or more required fields missing or empty                     |
-| 13            | Password is invalid (too weak, wrong format, too short)          |
-| 14            | Phone number already registered                                  |
-| 15            | Email address already registered                                 |
-| 16            | Invalid email or phone number format                             |
-| 17            | `password` and `confirm_password` do not match                  |
+| `error_code` | Meaning |
+|---:|---|
+| `10` | Invalid input data |
+| `11` | Username already exists |
+| `12` | Required field missing/empty |
+| `13` | Invalid/weak password |
+| `14` | Phone number already registered |
+| `15` | Email already registered |
+| `16` | Invalid email or phone format |
+| `17` | Password confirmation does not match |
 
 ---
 
-## POST /accounts/login/
+## POST `/accounts/login/`
 
-Authenticates a user's credentials and issues a JWT access/refresh token
-pair. To prevent brute-force and user-enumeration attacks, invalid
-credentials and a deleted account return the same generic error.
+Authenticates user credentials and issues a JWT access/refresh token pair.
 
 **Authentication:** Not required
 
-**Request Body**
+### Request Body
 
-| Field      | Type   | Required | Notes                                    |
-|------------|--------|----------|--------------------------------------------|
-| `username` | string | Yes      | Normalized to lowercase before lookup.      |
-| `password` | string | Yes      | Plain-text password.                        |
+| Field | Type | Required | Notes |
+|---|---|---:|---|
+| `username` | string | Yes | Normalized to lowercase |
+| `password` | string | Yes | Plain-text password |
 
-**Response — 200 OK**
+### Response — 200 OK
 
 ```json
 {
@@ -388,55 +401,62 @@ credentials and a deleted account return the same generic error.
 }
 ```
 
-**Response — 400 Bad Request**
+### Response — 400 Bad Request
 
-| `error_code` | Meaning                                                        |
-|---------------|-----------------------------------------------------------------|
-| 10            | Provided data (username or password format) is missing or invalid |
+| `error_code` | Meaning |
+|---:|---|
+| `10` | Missing or invalid request data |
 
-**Response — 401 Unauthorized**
+### Response — 401 Unauthorized
 
-| `error_code` | Meaning                                                                   |
-|---------------|-------------------------------------------------------------------------------|
-| 20            | Username or password does not match records, or the account has been deleted   |
-| 21            | Account status is inactive — `unverified`, `pending`, or `suspended`          |
+| `error_code` | Meaning |
+|---:|---|
+| `20` | Username/password mismatch or deleted account |
+| `21` | Account is inactive |
 
-**Account status behavior**
+### Account Status Behavior
 
-Only users with `status == 'active'` can log in successfully. Other statuses
-map to distinct `en`/`fa` messages under the same `error_code: 21`:
+Only:
 
-| `status`     | Message summary                          |
-|--------------|--------------------------------------------|
-| `unverified` | Account not yet verified by an admin        |
-| `pending`    | Account is pending approval                 |
-| `suspended`  | Account has been suspended                  |
+```text
+status == active
+```
+
+can log in successfully.
+
+| Status | Meaning |
+|---|---|
+| `unverified` | Account is not yet verified |
+| `pending` | Account is awaiting approval |
+| `suspended` | Account has been suspended |
+| `active` | Account can authenticate |
 
 ---
 
-## POST /accounts/reset-password/
+## POST `/accounts/reset-password/`
 
-Resets a user's password using a one-time backup recovery code. Backup codes
-are single-use and are invalidated immediately after a successful reset. A
-new backup code is issued in the response to replace the used one.
+Resets the password using a one-time backup recovery code.
 
 **Authentication:** Not required
 
-**Security notes**
-- Invalid account information and invalid backup codes return the same
-  generic error response, to prevent user enumeration.
-- Passwords and backup codes are never written to security logs.
+### Security Notes
 
-**Request Body**
+- Invalid account information and invalid backup codes use a generic error.
+- Backup codes are single-use.
+- The used backup code is invalidated.
+- A new backup code is issued after a successful reset.
+- Passwords and backup codes are not written to security logs.
 
-| Field              | Type   | Required | Notes                                    |
-|--------------------|--------|----------|----------------------------------------------|
-| `username`         | string | Yes      | Normalized to lowercase before lookup.         |
-| `backup_code`      | string | Yes      | One of the codes issued at registration.       |
-| `new_password`     | string | Yes      | —                                               |
-| `confirm_password` | string | Yes      | Must match `new_password`.                     |
+### Request Body
 
-**Response — 200 OK**
+| Field | Type | Required |
+|---|---|---:|
+| `username` | string | Yes |
+| `backup_code` | string | Yes |
+| `new_password` | string | Yes |
+| `confirm_password` | string | Yes |
+
+### Response — 200 OK
 
 ```json
 {
@@ -449,31 +469,30 @@ new backup code is issued in the response to replace the used one.
 }
 ```
 
-**Response — 400 Bad Request**
+### Response — 400 Bad Request
 
-| `error_code` | Meaning                                                                         |
-|---------------|-------------------------------------------------------------------------------------|
-| 10            | Invalid input data or password format                                                |
-| 75            | Invalid account information or backup code (covers nonexistent user, inactive account, and invalid/used backup code) |
+| `error_code` | Meaning |
+|---:|---|
+| `10` | Invalid input or password format |
+| `75` | Invalid account information or backup code |
 
 ---
 
-## GET /accounts/myRole/
+## GET `/accounts/myRole/`
 
-Returns the authenticated user's profile and role details.
+Returns the authenticated user's profile and role information.
 
 **Authentication:** Required (JWT)
 
-**Response — 200 OK**
+### Response — 200 OK
 
-Response body shape depends on `ReturnRoleUsersSerializer` (fields not
-confirmed here — includes at minimum the user's role).
+Response shape is defined by `ReturnRoleUsersSerializer`.
 
-**Response — 401 Unauthorized**
+### Response — 401 Unauthorized
 
-Standard authentication failure (missing/invalid token).
+Standard authentication failure.
 
-**Response — 500 Internal Server Error**
+### Response — 500 Internal Server Error
 
 ```json
 {
@@ -481,26 +500,19 @@ Standard authentication failure (missing/invalid token).
 }
 ```
 
-Returned when an unexpected exception occurs while serializing the user's
-role data.
-
 ---
 
-## PATCH /accounts/profile/update/
+## PATCH `/accounts/profile/update/`
 
-Partially updates the authenticated user's profile information. Only `PATCH`
-is supported — there is no `PUT` (full replace) on this endpoint.
+Partially updates the authenticated user's profile.
 
 **Authentication:** Required (JWT)
 
-**Request Body**
+Only `PATCH` is supported.
 
-Fields are defined by `ProfileUpdateSerializer` (not fully enumerated here);
-confirmed sensitive fields include `phone`, `password`, and
-`confirm_password`. Successful changes to `phone` or `password` are logged
-as sensitive-field changes.
+Sensitive changes such as phone/password changes are logged.
 
-**Response — 200 OK**
+### Response — 200 OK
 
 ```json
 {
@@ -508,61 +520,70 @@ as sensitive-field changes.
     "fa": "پروفایل با موفقیت بروزرسانی شد",
     "en": "Profile updated successfully"
   },
-  "data": { "...": "shape defined by ProfileUpdateResponseSerializer" }
+  "data": {
+    "...": "shape defined by ProfileUpdateResponseSerializer"
+  }
 }
 ```
 
-**Response — 400 Bad Request**
+### Response — 400 Bad Request
 
-| `error_code` | Meaning                                              |
-|---------------|-----------------------------------------------------------|
-| 10            | Invalid input data                                          |
-| 30            | Password is invalid (weak or bad format)                    |
-| 31            | Invalid phone number format                                 |
-| 32            | `password` and `confirm_password` do not match              |
-| 33            | Phone number already registered by another user              |
+| `error_code` | Meaning |
+|---:|---|
+| `10` | Invalid input |
+| `30` | Invalid password |
+| `31` | Invalid phone number |
+| `32` | Password confirmation mismatch |
+| `33` | Phone number already registered |
 
-**Response — 401 Unauthorized**
+### Response — 401 Unauthorized
 
-Standard authentication failure (missing/invalid token).
+Standard authentication failure.
+
+---
 
 # 🗺️ API Endpoints Reference — User Management
 
-Base path: `/user_management/` *(confirmed via the project's root `urls.py`: `path("user_management/", include('user_management.urls'))`)*
+**Base path:** `/user_management/`
 
-> ⚠️ Note: two different permission levels are used across this app:
-> - `IsSuperAdmin` → required for assigning roles, changing status, and soft-deleting users
-> - `IsAdminRole` → required for listing users, pending users, and roles
+> The base path is confirmed by the project's root URL configuration:
 >
-> These two permissions are not necessarily the same. Confirm which role is required before calling each endpoint.
+> ```python
+> path("user_management/", include("user_management.urls"))
+> ```
+
+## Permission Levels
+
+| Permission | Roles |
+|---|---|
+| `IsSuperAdmin` | active `super_admin` |
+| `IsAdminRole` | active `admin` or `super_admin` |
 
 ---
 
-## GET /user_management/admin/list-of-users/
+## GET `/user_management/admin/list-of-users/`
 
-Fetches a list of all registered users across the platform.
+Lists registered users.
 
 **Authentication:** Required (JWT)
 
 **Permissions:** `IsAuthenticated`, `IsAdminRole`
 
-**Response — 200 OK**
+### Response — 200 OK
 
 ```json
 [
-  { "...": "shape defined by ListOfUsersSerializer" }
+  {
+    "...": "shape defined by ListOfUsersSerializer"
+  }
 ]
 ```
 
-**Response — 401 Unauthorized**
+### Response — 403 Forbidden
 
-Standard authentication failure (missing/invalid token).
+Authenticated user does not have an admin role.
 
-**Response — 403 Forbidden**
-
-Authenticated user does not have admin role.
-
-**Response — 500 Internal Server Error**
+### Response — 500 Internal Server Error
 
 ```json
 {
@@ -572,301 +593,1482 @@ Authenticated user does not have admin role.
 
 ---
 
-## GET /user_management/admin/list-of-pending-users/
+## GET `/user_management/admin/list-of-pending-users/`
 
-Filters and lists all accounts awaiting activation (`status == "pending"`).
+Lists users whose status is:
+
+```text
+pending
+```
 
 **Authentication:** Required (JWT)
 
 **Permissions:** `IsAuthenticated`, `IsAdminRole`
 
-**Response — 200 OK**
-
-```json
-[
-  { "...": "shape defined by ListOfUsersSerializer" }
-]
-```
-
-**Response — 401 Unauthorized**
-
-Standard authentication failure.
-
-**Response — 403 Forbidden**
-
-Authenticated user does not have admin role.
-
-**Response — 500 Internal Server Error**
-
-```json
-{
-  "detail": "An error occurred while fetching pending users / خطایی در دریافت کاربران در انتظار رخ داده است."
-}
-```
-
-**Notes**
-
-- No pagination or additional filtering is applied — only `status == "pending"` is filtered.
+No additional pagination/filtering is applied by this endpoint.
 
 ---
 
-## GET /user_management/admin/list-of-roles/
+## GET `/user_management/admin/list-of-roles/`
 
-Lists all available system assignment roles.
+Lists available system roles.
 
 **Authentication:** Required (JWT)
 
 **Permissions:** `IsAuthenticated`, `IsAdminRole`
 
-**Response — 200 OK**
+### Response — 200 OK
 
 ```json
 [
-  { "...": "shape defined by ListOfRolesSerializer" }
+  {
+    "...": "shape defined by ListOfRolesSerializer"
+  }
 ]
-```
-
-**Response — 401 Unauthorized**
-
-Standard authentication failure.
-
-**Response — 403 Forbidden**
-
-Authenticated user does not have admin role.
-
-**Response — 500 Internal Server Error**
-
-```json
-{
-  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
-}
 ```
 
 ---
 
-## PATCH /user_management/super-admin/users/{pk}/assign/role/
+## PATCH `/user_management/super-admin/users/{pk}/assign/role/`
 
-Assigns or changes a user's role (promote to admin, demote to regular user, or change guest to regular user). Only a super admin can perform this action.
+Assigns or changes a user's role.
 
 **Authentication:** Required (JWT)
 
 **Permissions:** `IsAuthenticated`, `IsSuperAdmin`
 
-**Path Parameters**
+### Path Parameter
 
-| Field | Type | Notes                          |
-|-------|------|---------------------------------|
-| `pk`  | int  | ID of the target user whose role is being changed |
+| Field | Type |
+|---|---|
+| `pk` | int |
 
-**Request Body**
+### Request Body
 
-| Field  | Type | Required | Notes                                                              |
-|--------|------|----------|------------------------------------------------------------------------|
-| `role` | int  | Yes*     | ID of the new role (must be an existing, valid `Role`)                  |
+```json
+{
+  "role": 1
+}
+```
 
-> \* Note: the serializer is called with `partial=True`. If `role` is omitted from the request body, the request succeeds as a no-op with a `200` response and no actual change.
+`role` is the ID of the target `Role`.
 
-**Response — 200 OK**
+The serializer is used with `partial=True`.
+
+### Response — 200 OK
 
 ```json
 {
   "message": "User role updated successfully / نقش کاربر با موفقیت بروزرسانی شد.",
-  "data": { "...": "shape defined by UserRoleUpdateSerializer" }
+  "data": {
+    "...": "shape defined by UserRoleUpdateSerializer"
+  }
 }
 ```
 
-**Response — 400 Bad Request**
+### Response — 400 Bad Request
 
-| `error_code` | Meaning                                                                  |
-|---------------|-------------------------------------------------------------------------------|
-| 10            | Invalid payload (e.g. malformed `role`) or an attempt to change one's own role |
+| `error_code` | Meaning |
+|---:|---|
+| `10` | Invalid payload or attempt to change own role |
 
-**Response — 401 Unauthorized**
+### Response — 404 Not Found
 
-Standard authentication failure.
+| `error_code` | Meaning |
+|---:|---|
+| `40` | Target user not found or soft-deleted |
 
-**Response — 403 Forbidden**
+### Business Rules
 
-Authenticated user is not a super admin.
-
-**Response — 404 Not Found**
-
-| `error_code` | Meaning                                                          |
-|---------------|----------------------------------------------------------------------|
-| 40            | Target user not found or has been soft-deleted (`deleted_at` set)     |
-
-**Response — 500 Internal Server Error**
-
-```json
-{
-  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
-}
-```
-
-**Business rules / Notes**
-
-- A user cannot change their own role, even a super admin — this attempt is rejected with `error_code: 10`.
-- All attempts (successful and failed) are logged via `log_critical_event`, including the old and new role on success.
+- A user cannot change their own role.
+- Successful and failed attempts are recorded through `log_critical_event`.
+- The target user must not be soft-deleted.
 
 ---
 
-## PATCH /user_management/super-admin/users/{pk}/change/status/
+## PATCH `/user_management/super-admin/users/{pk}/change/status/`
 
-Modifies a user account's status (e.g. approving pending users). Only a super admin can perform this action.
+Changes a user's status.
 
 **Authentication:** Required (JWT)
 
 **Permissions:** `IsAuthenticated`, `IsSuperAdmin`
 
-**Path Parameters**
+### Valid Status Values
 
-| Field | Type | Notes                            |
-|-------|------|-------------------------------------|
-| `pk`  | int  | ID of the target user whose status is being changed |
+```text
+pending
+active
+suspended
+unverified
+```
 
-**Request Body**
+### Request Body
 
-| Field    | Type   | Required | Notes                                                                 |
-|----------|--------|----------|----------------------------------------------------------------------------|
-| `status` | string | Yes*     | One of: `pending`, `active`, `suspended`, `unverified`                     |
+```json
+{
+  "status": "active"
+}
+```
 
-> \* Like the role endpoint, this serializer is also called with `partial=True`.
-
-**Valid status values**
-
-| Value        | Meaning                    |
-|--------------|--------------------------------|
-| `pending`    | Awaiting approval               |
-| `active`     | Active / Approved                |
-| `suspended`  | Suspended                        |
-| `unverified` | Unverified                       |
-
-**Response — 200 OK**
+### Response — 200 OK
 
 ```json
 {
   "message": "User status updated successfully to '{new_status}' / وضعیت کاربر با موفقیت به {new_status} تغییر یافت.",
-  "data": { "...": "shape defined by UserStatusUpdateSerializer" }
+  "data": {
+    "...": "shape defined by UserStatusUpdateSerializer"
+  }
 }
 ```
 
-**Response — 400 Bad Request**
+### Response — 400 Bad Request
 
-| `error_code` | Meaning                          |
-|---------------|--------------------------------------|
-| 10            | The `status` value supplied is invalid |
-
-**Response — 401 Unauthorized**
-
-Standard authentication failure.
-
-**Response — 403 Forbidden**
-
-Authenticated user is not a super admin.
-
-**Response — 404 Not Found**
-
-| `error_code` | Meaning                                          |
-|---------------|-------------------------------------------------------|
-| 40            | Target user not found or has been soft-deleted          |
-
-**Response — 500 Internal Server Error**
-
-```json
-{
-  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
-}
+```text
+error_code: 10
 ```
 
-**Notes**
+Invalid status value.
 
-- Both successful and failed status changes are logged via `log_critical_event`, including `old_status` and `new_status`.
-- Unlike the role endpoint, this endpoint has no restriction on changing one's own status (no self-status-change check).
+### Response — 404 Not Found
+
+```text
+error_code: 40
+```
+
+Target user does not exist or is soft-deleted.
+
+### Business Rules
+
+- Successful and failed status changes are logged.
+- The log contains the old and new status.
+- The current implementation does not apply a self-status-change restriction.
 
 ---
 
-## DELETE /user_management/super-admin/users/{pk}/change/status/
+## DELETE `/user_management/super-admin/users/{pk}/change/status/`
 
-Soft-deletes a user account. Only a super admin can perform this action.
+Soft-deletes a user.
 
-> ⚠️ Note: this shares the exact same URL as `PATCH .../change/status/` above — both `patch` and `delete` are handled by `ManageUsersStatusView`, distinguished only by HTTP method.
+The same URL as the PATCH endpoint is used; the HTTP method determines the operation.
 
 **Authentication:** Required (JWT)
 
 **Permissions:** `IsAuthenticated`, `IsSuperAdmin`
 
-**Path Parameters**
-
-| Field | Type | Notes                    |
-|-------|------|------------------------------|
-| `pk`  | int  | ID of the target user to delete |
-
-**Response — 204 No Content**
+### Response — 204 No Content
 
 Empty response body.
 
-**Response — 401 Unauthorized**
+### Soft Delete Behavior
 
-Standard authentication failure.
+The user is not physically removed.
 
-**Response — 403 Forbidden**
+Instead:
 
-Authenticated user is not a super admin.
+```text
+deleted_at = current time
+status = deleted
+```
 
-**Response — 404 Not Found**
+---
 
-| `error_code` | Meaning                                          |
-|---------------|-------------------------------------------------------|
-| 40            | Target user not found or already deleted               |
+# 🌐 Domain & Tag Management
 
-**Response — 500 Internal Server Error**
+The current domain/tag functionality is implemented in:
+
+```text
+domain_tag_management/
+```
+
+The application is mounted at `/domain_tag_management/` in `config/urls.py`. The routes below are the exact paths defined by the application URL configuration.
+
+---
+
+## Domain API
+
+### GET `/domain_tag_management/domain/detail/list/`
+
+Lists active domains visible to the authenticated user.
+
+**Permission:** `IsAuthenticated`
+
+### Visibility Rules
+
+For `admin` and `super_admin`:
+
+- active domains are available according to the admin scope.
+
+For other authenticated users:
+
+- domains belonging to the user's groups are visible.
+- ungrouped domains are visible.
+- deleted domains are excluded.
+
+### Query Parameters
+
+```text
+search
+page
+page_size
+```
+
+Default:
+
+```text
+page_size = 20
+```
+
+Maximum:
+
+```text
+page_size = 100
+```
+
+Example:
+
+```http
+GET domain/detail/list/?search=example&page=1&page_size=20
+```
+
+---
+
+## POST `/domain_tag_management/import-or-edit/domain/`
+
+Creates/imports domains.
+
+**Permissions:**
+
+```text
+IsAuthenticated
+IsAdminRole
+```
+
+Both a single object and a list are supported.
+
+### Example
 
 ```json
 {
-  "detail": "An unexpected error occurred / خطای غیرمنتظره‌ای رخ داده است."
+  "domain_name": "example.com",
+  "description": "Example domain",
+  "group": 1
 }
 ```
 
-**Business rules / Notes**
+### Bulk Example
 
-- This is a **soft delete**: `deleted_at` is set to the current time and `status` is set to `'deleted'`; the record is not actually removed from the database.
-- After this operation, the user becomes inaccessible through any endpoint that filters on `deleted_at__isnull=True` (e.g. role assignment, status change).
+```json
+[
+  {
+    "domain_name": "example.com",
+    "description": "Example domain",
+    "group": 1
+  },
+  {
+    "domain_name": "example.org",
+    "description": "Example organization",
+    "group": null
+  }
+]
+```
 
-3. Enterprise Domain & Tag Management (domain_views.py)
-POST /api/accounts/domains/import/ - Admin-only operation to import or create structured domains.
+### Domain Normalization
 
-GET /api/accounts/domains/ - Retrieves a tailored list of active domains depending on group visibility or admin scopes.
+The import workflow normalizes domain input, including:
 
-POST /api/accounts/tags/ - Creates a tracking metadata tag in the system (Admin-only).
+- lowercasing
+- accepting domains with or without an HTTP/HTTPS prefix
+- parsing the hostname
+- removing a parsed port
 
-GET /api/accounts/tags/ - Returns a dictionary list of all valid registered tracking metadata tags.
+Existing active domains are skipped.
 
-POST /api/accounts/domains/assign-tag/ - Bulk records assignment of metadata tags to specified domains (Handles conflict monitoring).
+Soft-deleted domains can be reactivated.
 
-PATCH /api/accounts/domains/assign-tag/ - Multi-record transaction patch updating domain tags with explicit verification confirm flags.
+---
 
-4. Group & Access Control Management (group_views.py)
-GET /api/accounts/groups/ - Lists all available operational organizational groups (Admin-only).
+## PATCH `/domain_tag_management/import-or-edit/domain/`
 
-POST /api/accounts/groups/ - Instantiates a new system access or organizational group profile.
+Bulk-updates existing domains.
 
-GET /api/accounts/groups/<int:pk>/ - Fetches detailed single-group structural metadata (Includes soft-delete filtration).
+**Permissions:**
 
-PUT /api/accounts/groups/<int:pk>/ - Completely updates group properties and operational identifiers.
+```text
+IsAuthenticated
+IsAdminRole
+```
 
-PATCH /api/accounts/groups/<int:pk>/ - Selectively alters single properties on an active group profile.
+The update workflow is transactional.
 
-DELETE /api/accounts/groups/<int:pk>/ - Handles graceful soft-deletion of organizational groups using timestamp tracking.
+---
 
-POST /api/accounts/groups/assign-user/ - Bridges active users to organizational access groups.
+## DELETE `/domain_tag_management/import-or-edit/domain/`
 
-🛠️ Tech Stack & Security Implementations
-Core Framework: Django
+Bulk soft-deletes domains.
 
-API Delivery & Documentation: Django REST Framework (DRF) & drf-yasg (Swagger/OpenAPI UI integration)
+**Permissions:**
 
-Token Operations: djangorestframework-simplejwt (JSON Web Tokens)
+```text
+IsAuthenticated
+IsAdminRole
+```
 
-Cryptographic Signing: Django Core Signers (TimestampSigner)
+Domains receive a `deleted_at` timestamp instead of being physically deleted.
 
-Security Practices: Password hashing (PBKDF2), atomic transaction blocks for bulk tasks (transaction.atomic), custom protection filters against user enumeration attacks, and timing-attack resilient user lookups.
+The operation is transactional.
+
+---
+
+## GET `/domain_tag_management/domain/<int:pk>/detail/`
+
+Returns details for a specific domain.
+
+**Permission:** `IsAuthenticated`
+
+The returned information depends on the user's access and the current domain/tag rules.
+
+---
+
+# 🏷️ Tag API
+
+## POST `/domain_tag_management/tag/create/`
+
+Creates a tag.
+
+**Permissions:**
+
+```text
+IsAuthenticated
+IsAdminRole
+```
+
+### Example
+
+```json
+{
+  "title": "Technology",
+  "description": "Technology related domains"
+}
+```
+
+### Tag Normalization
+
+The normalized title is generated from:
+
+```text
+title.strip().lower()
+```
+
+A deterministic tag code is generated from the normalized title.
+
+Duplicate tag titles are rejected.
+
+Known validation codes include:
+
+| `error_code` | Meaning |
+|---:|---|
+| `10` | General validation error |
+| `11` | Duplicate tag title |
+
+---
+
+## GET `/domain_tag_management/tag/detail/list`
+
+Lists active, non-deleted tags.
+
+**Permission:** `IsAuthenticated`
+
+Tags are ordered by title.
+
+> The current URL configuration defines this route **without a trailing slash**.
+
+---
+
+## PATCH `/domain_tag_management/tag/<int:pk>/edit/`
+
+Updates an active tag.
+
+**Permissions:**
+
+```text
+IsAuthenticated
+IsAdminRole
+```
+
+If the tag does not exist or has been soft-deleted, the endpoint returns:
+
+```text
+error_code: 55
+```
+
+---
+
+## DELETE `/domain_tag_management/tag/<int:pk>/edit/`
+
+Soft-deletes a tag.
+
+**Permissions:**
+
+```text
+IsAuthenticated
+IsAdminRole
+```
+
+The tag is marked:
+
+```text
+deleted_at != null
+is_active = false
+```
+
+The response is:
+
+```text
+204 No Content
+```
+
+---
+
+# 🔗 Domain-Tag Assignment API
+
+## POST `/domain_tag_management/tag-assign-to-domain/`
+
+Synchronizes domain-tag assignments.
+
+**Permissions:**
+
+```text
+IsAuthenticated
+IsAllowedUser
+```
+
+The endpoint supports:
+
+- add
+- update
+- delete
+
+in a single bulk request.
+
+---
+
+## Request Structure
+
+```json
+{
+  "add": [],
+  "update": [],
+  "delete": []
+}
+```
+
+All three arrays are optional.
+
+---
+
+## Add Tags
+
+```json
+{
+  "add": [
+    {
+      "domain_name": "example.com",
+      "title": "Technology"
+    }
+  ]
+}
+```
+
+---
+
+## Update Tags
+
+```json
+{
+  "update": [
+    {
+      "domain_name": "example.com",
+      "old_title": "Technology",
+      "title": "Software",
+      "confirm": true
+    }
+  ]
+}
+```
+
+The `confirm` field is used by the update workflow where explicit confirmation is required.
+
+---
+
+## Delete Tags
+
+```json
+{
+  "delete": [
+    {
+      "domain_name": "example.com",
+      "title": "Software"
+    }
+  ]
+}
+```
+
+The delete `title` field may be optional according to the current serializer definition.
+
+---
+
+# 👁️ Domain/Tag Visibility Rules
+
+The domain-list and assignment logic applies role-based tag visibility.
+
+## Admin / Super Admin
+
+For an admin or super-admin user:
+
+- relevant tags can be returned according to the endpoint's visibility rules.
+- the user can add tags subject to the main-tag limit.
+- main tags are determined from assignments associated with admin/super-admin users.
+
+## Regular User
+
+A regular user can access domains permitted by group/ungrouped-domain visibility.
+
+Tag visibility and tag creation are restricted according to the current domain/tag assignment rules.
+
+## Limited User
+
+A limited user does not pass `IsAllowedUser` and therefore cannot use the domain-tag assignment endpoint.
+
+---
+
+# ⭐ Main Tag Rule
+
+The domain/tag logic contains a maximum main-tag rule.
+
+For eligible administrators:
+
+```text
+Maximum main tags per domain = 2
+```
+
+When two main tags are already assigned by eligible admin/super-admin users, another normal main-tag assignment is not permitted by the main-tag rule.
+
+The domain list may expose:
+
+```text
+can_add_tag
+```
+
+to indicate whether the current user can add a tag under the applicable rules.
+
+---
+
+# 👥 Group Management
+
+The `group_management` application provides group CRUD operations, group membership management, domain assignment, and role-aware group-domain/tag visibility.
+
+The application is mounted at:
+
+```text
+/group_management/
+```
+
+## Group Management Structure
+
+```text
+group_management/
+├── serializers/
+│   ├── group_detail.py
+│   ├── group_domain_assign.py
+│   ├── group_domains.py
+│   ├── group_list.py
+│   ├── group_members.py
+│   ├── group_register.py
+│   └── group_user_bulk_assign.py
+├── views/
+│   ├── group_list.py
+│   ├── group_register.py
+│   ├── group_detail.py
+│   ├── group_user_bulk_assign.py
+│   ├── group_domains.py
+│   ├── group_members.py
+│   └── group_domain_assign.py
+└── urls.py
+```
+
+## Group API
+
+### GET `/group_management/list/`
+
+Returns the list of active groups.
+
+**Authentication:** Required
+
+### Admin / Superadmin response
+
+Admin users receive:
+
+```json
+[
+  {
+    "id": 1,
+    "code": 123456789,
+    "title": "Example Group",
+    "description": "Example description",
+    "is_active": true,
+    "user_count": 5
+  }
+]
+```
+
+`user_count` counts active `UserGroup` memberships.
+
+### Other authenticated users
+
+Non-admin users receive only groups they are active members of, with:
+
+```json
+[
+  {
+    "id": 1,
+    "title": "Example Group",
+    "description": "Example description"
+  }
+]
+```
+
+Deleted groups and deleted memberships are excluded.
+
+---
+
+## POST `/group_management/create/`
+
+Creates a new group.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+### Request Body
+
+```json
+{
+  "title": "Example Group",
+  "description": "Example description"
+}
+```
+
+### Response — 201 Created
+
+```json
+{
+  "id": 1,
+  "title": "Example Group",
+  "code": 123456789,
+  "description": "Example description"
+}
+```
+
+### Validation
+
+Group titles are normalized using `strip().lower()` for duplicate detection. A title that matches an existing normalized title is rejected.
+
+`error_code: 10` is returned for invalid group creation data.
+
+---
+
+## GET `/group_management/<id>/detail/`
+
+Returns the details of an active group.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+If the group does not exist or has been soft-deleted:
+
+```text
+HTTP 404
+error_code: 65
+```
+
+---
+
+## PATCH `/group_management/<id>/detail/`
+
+Partially updates an active group.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+The update uses `GroupSerializer` with `partial=True`. Model fields marked read-only by the serializer include:
+
+```text
+assigned_by
+deleted_at
+created_at
+updated_at
+code
+```
+
+### Error responses
+
+| Status | Error | Meaning |
+|---|---:|---|
+| `400` | `10` | Submitted group data is invalid |
+| `404` | `65` | Group does not exist or has been deleted |
+
+---
+
+## DELETE `/group_management/<id>/detail/`
+
+Soft-deletes an active group.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+The group is not physically deleted. Instead, `deleted_at` is populated.
+
+### Response
+
+```text
+204 No Content
+```
+
+If the group does not exist or has already been deleted:
+
+```text
+404 Not Found
+error_code: 65
+```
+
+---
+
+# 👤 Group Members
+
+## GET `/group_management/group/<group_id>/members/`
+
+Returns active members of a group.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+Deleted users and soft-deleted memberships are excluded.
+
+### Member fields
+
+The response includes:
+
+- membership `id`
+- `user_id`
+- `username`
+- `email`
+- `first_name`
+- `last_name`
+- `is_primary`
+- `assigned_by`
+- `created_at`
+
+If the group does not exist or has been deleted, the endpoint returns `404` with `error_code: 65`.
+
+---
+
+## DELETE `/group_management/group/<group_id>/members/<user_id>/`
+
+Soft-removes a user from a group.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+The membership record is retained and its `deleted_at` value is set.
+
+### Error responses
+
+| Status | Error | Meaning |
+|---|---:|---|
+| `404` | `65` | Group does not exist or has been deleted |
+| `404` | `67` | User is not an active member of the group |
+
+Successful removal returns `204 No Content`.
+
+---
+
+# 👥 Bulk User Assignment
+
+## POST `/group_management/group/<group_id>/users/assign/`
+
+Adds and/or removes multiple users from a group in one request.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+### Request Body
+
+```json
+{
+  "add": [
+    {
+      "user_id": 1,
+      "is_primary": true
+    },
+    {
+      "user_id": 2
+    }
+  ],
+  "remove": [
+    {
+      "user_id": 5
+    }
+  ]
+}
+```
+
+Both arrays are optional and default to empty lists.
+
+### Validation rules
+
+Before any database changes are made, the endpoint validates:
+
+- the target group exists and is not deleted;
+- each added user exists and is not deleted;
+- a user is not already an active member;
+- the same user ID is not repeated in the request;
+- a user marked as `is_primary=true` does not already have another active primary group;
+- every removed user is an active member of the target group.
+
+If validation fails, no assignment changes are applied.
+
+### Primary Group Rule
+
+A user can have at most one active primary group. This rule is enforced in the view before `bulk_create`, because bulk creation bypasses serializer-level validation.
+
+### Successful response
+
+```json
+{
+  "message": {
+    "fa": "تغییرات با موفقیت اعمال شد.",
+    "en": "Changes were applied successfully."
+  },
+  "result": {
+    "added": 2,
+    "removed": 1
+  }
+}
+```
+
+HTTP status: `200 OK`.
+
+### Error codes
+
+| Status | Error | Meaning |
+|---|---:|---|
+| `400` | `60` | One or more requested changes are invalid |
+| `404` | `65` | Target group does not exist or has been deleted |
+
+The database changes are applied inside `transaction.atomic()`.
+
+---
+
+# 🌐 Group Domain Assignment
+
+## POST `/group_management/group/<group_id>/domains/assign/`
+
+Adds and/or removes domains from a group.
+
+**Permissions:** `IsAuthenticated`, `IsAdminRole`
+
+### Request Body
+
+```json
+{
+  "add": [
+    {
+      "domain_name": "example.com"
+    }
+  ],
+  "remove": [
+    {
+      "domain_name": "old-example.com"
+    }
+  ]
+}
+```
+
+Both arrays are optional and default to empty lists. An empty object is therefore valid input and results in zero additions/removals when no validation errors exist.
+
+### Add behavior
+
+- The domain must exist and not be soft-deleted.
+- Assigning a domain already assigned to the same group is an error.
+- A domain assigned to another group is moved to the requested group.
+
+### Remove behavior
+
+- The domain must exist and not be soft-deleted.
+- The domain must currently belong to the requested group.
+- Removal sets the domain's `group` to `NULL`.
+
+Duplicate domain names within the request are rejected. All validation is completed before database changes are applied.
+
+### Successful response
+
+```json
+{
+  "message": {
+    "fa": "تغییرات با موفقیت اعمال شد.",
+    "en": "Changes were applied successfully."
+  },
+  "result": {
+    "added": 1,
+    "removed": 1
+  }
+}
+```
+
+HTTP status: `200 OK`.
+
+### Error codes
+
+| Status | Error | Meaning |
+|---|---:|---|
+| `400` | `60` | One or more requested changes are invalid |
+| `404` | `65` | Target group does not exist or has been deleted |
+
+Changes are applied using `transaction.atomic()` and `bulk_update()`.
+
+---
+
+# 🌍 Group Domains & Tag Visibility
+
+## GET `/group_management/group/<group_id>/domains/`
+
+Returns active domains associated with a specific group and applies role-aware tag visibility.
+
+**Authentication:** Required
+
+### Group access
+
+- `admin` and `super_admin` users can access domains of groups regardless of membership.
+- Other users must be an active member of the requested group.
+- If the group does not exist or is deleted, the endpoint returns `404` with `error_code: 65`.
+- A non-admin user without group membership receives `403` with `error_code: 66`.
+
+### Domain response
+
+Each returned domain is based on `DomainRegisterSerializer` and is extended with:
+
+```text
+tags
+can_add_tag
+has_main_tag
+```
+
+### Tag visibility
+
+#### Admin / Superadmin
+
+- All active domain-tag assignments are visible.
+- `can_add_tag` is `true`.
+- `tags_overview` is included.
+- `tags_overview` contains each tag, its assignment count, and the users associated with that tag.
+
+#### Limited
+
+- Only main tags are visible.
+- `can_add_tag` is `false`.
+
+#### Regular user with a main tag present
+
+- Only main tags are visible.
+- `can_add_tag` is `false`.
+
+#### Regular user without a main tag present
+
+- Main tags and the current user's tags are visible.
+- Duplicate tags are de-duplicated by tag ID.
+- `can_add_tag` is `true` only when the current user has not already assigned a tag to the domain.
+
+A main tag is determined by an assignment whose user has the `admin` or `super_admin` role.
+
+> **Implementation note:** `GroupDomainView` also treats `request.user.is_superuser` as admin for its access and tag-visibility logic.
+
+---
+
+# 📋 Group Management API Summary
+
+| Method | Endpoint | Purpose | Permission |
+|---|---|---|---|
+| GET | `/group_management/list/` | List active groups | Authenticated |
+| POST | `/group_management/create/` | Create group | Admin / Superadmin |
+| GET | `/group_management/<id>/detail/` | Group detail | Admin / Superadmin |
+| PATCH | `/group_management/<id>/detail/` | Update group | Admin / Superadmin |
+| DELETE | `/group_management/<id>/detail/` | Soft-delete group | Admin / Superadmin |
+| GET | `/group_management/group/<group_id>/domains/` | List group domains + visible tags | Authenticated |
+| POST | `/group_management/group/<group_id>/domains/assign/` | Add/remove group domains | Admin / Superadmin |
+| GET | `/group_management/group/<group_id>/members/` | List active members | Admin / Superadmin |
+| DELETE | `/group_management/group/<group_id>/members/<user_id>/` | Soft-remove member | Admin / Superadmin |
+| POST | `/group_management/group/<group_id>/users/assign/` | Bulk add/remove users | Admin / Superadmin |
+
+# 🗃️ Core Data Model
+
+The identity layer contains the core entities used throughout the service.
+
+## User
+
+Important fields include:
+
+- `username`
+- `email`
+- `phone`
+- `status`
+- `email_verified`
+- `failed_login_attempts`
+- `last_login_at`
+- `role`
+- `created_at`
+- `updated_at`
+- `deleted_at`
+
+Username rules include:
+
+```text
+5–20 characters
+letters / digits / _ / -
+lowercased on save
+```
+
+Phone format:
+
+```text
+^09\d{9}$
+```
+
+---
+
+## Role
+
+Supported role codes:
+
+```text
+limited
+regular
+admin
+super_admin
+```
+
+Roles also contain:
+
+- title
+- level
+- system-role flag
+- timestamps
+
+---
+
+## Group
+
+Groups contain:
+
+- code
+- title
+- normalized title
+- description
+- active state
+- assigned-by user
+- timestamps
+- soft-delete timestamp
+
+---
+
+## UserGroup
+
+Connects users to groups and supports:
+
+- group membership
+- primary group
+- assigning user
+- soft deletion
+
+The database enforces uniqueness for active relationships and active primary-group assignment.
+
+---
+
+## Domain
+
+Domains contain:
+
+- domain name
+- description
+- creator
+- group
+- timestamps
+- soft-delete timestamp
+
+A domain can be associated with a group or remain ungrouped.
+
+---
+
+## Tag
+
+Tags contain:
+
+- title
+- normalized title
+- deterministic code
+- description
+- creator
+- active state
+- timestamps
+- soft-delete timestamp
+
+---
+
+## User_Domain_Tag
+
+Connects:
+
+```text
+User
+Domain
+Tag
+```
+
+and prevents duplicate active user/domain/tag assignments.
+
+---
+
+## Backup_Code
+
+Backup codes are stored securely using hashed values.
+
+They include:
+
+- user
+- hashed code
+- used state
+- creation timestamp
+
+---
+
+# 🗑️ Soft Delete
+
+The project uses soft deletion for several entities.
+
+Instead of physically removing a record:
+
+```text
+deleted_at
+```
+
+is populated.
+
+For tags, deletion also sets:
+
+```text
+is_active = false
+```
+
+For users, soft deletion sets:
+
+```text
+deleted_at = current time
+status = deleted
+```
+
+Soft-deleted records are excluded from active workflows.
+
+---
+
+# 🔄 Transactions
+
+Bulk workflows use `transaction.atomic()` where atomic behavior is required.
+
+Examples include:
+
+- bulk domain updates
+- bulk domain deletion
+- domain-tag synchronization
+- other security-sensitive bulk operations
+
+The goal is to prevent partial database state when a transactional operation fails.
+
+---
+
+# 📝 Security Audit Logging
+
+Security-sensitive operations are logged through the project's logging/service layer.
+
+Examples include:
+
+- password reset attempts
+- role changes
+- status changes
+- sensitive profile changes
+- domain/tag security-sensitive operations
+
+Sensitive values such as:
+
+- passwords
+- JWT tokens
+- backup codes
+
+must not be written to security logs.
+
+---
+
+# ⚠️ Error Handling
+
+The project uses both:
+
+1. Standard Django REST Framework HTTP status responses.
+2. Application-specific `error_code` values for domain-specific validation and business rules.
+
+Examples documented by the current APIs include:
+
+| Error Code | Usage |
+|---:|---|
+| `10` | General validation error in several workflows |
+| `11` | Duplicate tag title / username-related workflow depending on endpoint |
+| `20` | Invalid login credentials/deleted account |
+| `21` | Inactive account |
+| `30` | Invalid password during profile update |
+| `31` | Invalid phone during profile update |
+| `32` | Password confirmation mismatch |
+| `33` | Duplicate phone during profile update |
+| `40` | Target user not found/soft-deleted |
+| `55` | Tag not found/unavailable |
+| `75` | Invalid password-reset account/backup-code information |
+| `403` | Access denied in applicable domain/tag authorization checks |
+
+> Error codes are endpoint-specific. The same numeric code should not be assumed to have identical semantics across every application.
+
+---
+
+# 📚 API Documentation
+
+The project uses OpenAPI tooling for API documentation.
+
+The current dependency set includes:
+
+```text
+drf-spectacular==0.30.0
+```
+
+`drf-yasg` is also retained in the project's dependency set where required by the existing codebase.
+
+The configured OpenAPI/schema routes should be checked in `config/urls.py`.
+
+---
+
+# 🧪 Testing
+
+Run all tests:
+
+```bash
+python manage.py test
+```
+
+Run a specific application:
+
+```bash
+python manage.py test user_management
+```
+
+Run a specific test module:
+
+```bash
+python manage.py test user_management.tests.test_manage_status
+```
+
+For domain/tag workflows, tests should cover:
+
+- domain creation
+- duplicate domains
+- domain normalization
+- domain reactivation
+- bulk domain update
+- bulk domain delete
+- tag creation
+- duplicate tag handling
+- tag update
+- tag soft deletion
+- tag visibility
+- domain-tag add
+- domain-tag update
+- domain-tag delete
+- permission restrictions
+- main-tag limit
+- transactional rollback
+
+---
+
+# 🐳 Docker
+
+The project contains a `Dockerfile`.
+
+Dependencies are installed from:
+
+```text
+requirements.txt
+```
+
+Whenever a Python dependency is added or changed, the Docker image used by the deployment environment must be rebuilt.
+
+For example, after adding:
+
+```text
+drf-spectacular==0.30.0
+```
+
+the deployment must build a new image containing that package.
+
+An already-running container does not automatically receive changes made to `requirements.txt`.
+
+---
+
+# 🚀 GitLab CI/CD
+
+The repository contains:
+
+```text
+.gitlab-ci.yml
+```
+
+The CI/CD configuration defines the project's automated build/deployment workflow.
+
+The exact jobs, runners, variables, and deployment commands are environment-specific and should be taken directly from the current `.gitlab-ci.yml`.
+
+---
+
+# 🔒 Security Considerations
+
+- Use JWT authentication for protected APIs.
+- Enforce role-based authorization through DRF permissions.
+- Keep secrets in environment variables.
+- Never commit `.env`.
+- Never log passwords, backup codes, or tokens.
+- Use soft deletion for entities where historical records must be preserved.
+- Use transactions for atomic bulk operations.
+- Use `DEBUG=False` in production.
+- Configure `ALLOWED_HOSTS` appropriately.
+- Rebuild deployment images after dependency changes.
+
+---
+
+# 🛠️ Development Workflow
+
+When changing an API:
+
+1. Update the corresponding view.
+2. Update serializers.
+3. Update URL configuration if the route changes.
+4. Add or update tests.
+5. Run the relevant tests.
+6. Run the full test suite when appropriate.
+7. Update OpenAPI documentation/schema.
+8. Update this README.
+9. If dependencies changed, update `requirements.txt`.
+10. Rebuild the Docker image for deployment.
+
+---
+
+# 📋 Current Domain & Tag API Summary
+
+| Method | Endpoint | Purpose | Permission |
+|---|---|---|---|
+| GET | `/domain_tag_management/domain/detail/list/` | List visible active domains | Authenticated |
+| POST | `/domain_tag_management/import-or-edit/domain/` | Create/import domains | Admin / Super Admin |
+| PATCH | `/domain_tag_management/import-or-edit/domain/` | Bulk update domains | Admin / Super Admin |
+| DELETE | `/domain_tag_management/import-or-edit/domain/` | Bulk soft-delete domains | Admin / Super Admin |
+| GET | `/domain_tag_management/domain/<pk>/detail/` | Domain detail | Authenticated |
+| POST | `/domain_tag_management/tag/create/` | Create tag | Admin / Super Admin |
+| GET | `/domain_tag_management/tag/detail/list` | List active tags | Authenticated |
+| PATCH | `/domain_tag_management/tag/<pk>/edit/` | Update tag | Admin / Super Admin |
+| DELETE | `/domain_tag_management/tag/<pk>/edit/` | Soft-delete tag | Admin / Super Admin |
+| POST | `/domain_tag_management/tag-assign-to-domain/` | Add/update/delete domain tags | Allowed User |
+
+---
+
+# 📋 Current Authentication & User Management API Summary
+
+| Method | Endpoint | Purpose | Permission |
+|---|---|---|---|
+| POST | `/accounts/register/` | Register user | Public |
+| POST | `/accounts/login/` | Login | Public |
+| POST | `/accounts/reset-password/` | Password reset | Public |
+| GET | `/accounts/myRole/` | Get current role/profile | Authenticated |
+| PATCH | `/accounts/profile/update/` | Update profile | Authenticated |
+| GET | `/user_management/admin/list-of-users/` | List users | Admin / Super Admin |
+| GET | `/user_management/admin/list-of-pending-users/` | List pending users | Admin / Super Admin |
+| GET | `/user_management/admin/list-of-roles/` | List roles | Admin / Super Admin |
+| PATCH | `/user_management/super-admin/users/{pk}/assign/role/` | Assign role | Super Admin |
+| PATCH | `/user_management/super-admin/users/{pk}/change/status/` | Change status | Super Admin |
+| DELETE | `/user_management/super-admin/users/{pk}/change/status/` | Soft-delete user | Super Admin |
+
+---
+
+# 📌 Documentation Status
+
+The README documents the currently reviewed application structure and API behavior for:
+
+- Authentication and account management
+- User and role management
+- Group management
+- Group membership management
+- Group-domain assignment
+- Domain management
+- Tag management
+- Domain-tag assignment
+- Role-based access control
+- Soft deletion
+- Security audit logging
+- Docker/dependency considerations
+- Testing and development workflow
+
+---
+
+# 🧰 Tech Stack & Security
+
+### Core Framework
+
+```text
+Django
+Django REST Framework
+```
+
+### Authentication
+
+```text
+djangorestframework-simplejwt
+```
+
+### API Documentation
+
+```text
+drf-spectacular
+drf-yasg
+```
+
+### Database
+
+```text
+PostgreSQL
+```
+
+### Deployment
+
+```text
+Docker
+GitLab CI/CD
+```
+
+### Security
+
+- Django password hashing
+- JWT authentication
+- One-time hashed backup codes
+- Timestamp-based/security-sensitive recovery workflow
+- Role-based permissions
+- User enumeration protection
+- Atomic transactions
+- Security audit logging
+- Soft deletion
+
+---
+
+# 📄 License
+
+See the `LICENSE` file for the project's license and usage terms.

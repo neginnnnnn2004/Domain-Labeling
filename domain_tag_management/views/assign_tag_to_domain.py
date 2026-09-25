@@ -94,12 +94,8 @@ class BulkSyncDomainTagsView(APIView):
         Return True for admin and super_admin users.
         """
 
-        return user.is_superuser or (
-            user.role.code in ["admin", "super_admin"]
-            if user.role
-            else False
-        )
-
+        return  user.role.code in ["admin", "super_admin"] if user.role else False
+    
     # ================================================================
     # Object helpers
     # ================================================================
